@@ -1,6 +1,27 @@
+use core::panic;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
+
+fn tokenize(char: char) -> (String, String, String) {
+    let (token_type, literal) = match char {
+        '(' => ("LEFT_PAREN", "null"),
+        ')' => ("RIGHT_PAREN", "null"),
+        _ => panic!("Unknown character: {}", char),
+    };
+    (
+        token_type.to_string(),
+        char.to_string(),
+        literal.to_string(),
+    )
+}
+
+fn scan(input: &str) {
+    for char in input.chars() {
+        let (token_type, lexeme, literal) = tokenize(char);
+        println!("{} {} {}", token_type, lexeme, literal);
+    }
+}
 
 fn main() {
     let args: Vec<String> = env::args().collect();
@@ -22,10 +43,9 @@ fn main() {
             });
 
             if !file_contents.is_empty() {
-                panic!("Scanner not implemented");
-            } else {
-                println!("EOF  null"); // Placeholder, remove this line when implementing the scanner
+                scan(&file_contents);
             }
+            println!("EOF  null");
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
