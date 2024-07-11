@@ -7,6 +7,8 @@ fn tokenize(char: char) -> (String, String, String) {
     let (token_type, literal) = match char {
         '(' => ("LEFT_PAREN", "null"),
         ')' => ("RIGHT_PAREN", "null"),
+        '{' => ("LEFT_BRACE", "null"),
+        '}' => ("RIGHT_BRACE", "null"),
         _ => panic!("Unknown character: {}", char),
     };
     (
