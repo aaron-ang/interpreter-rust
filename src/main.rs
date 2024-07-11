@@ -1,9 +1,10 @@
-use core::panic;
 use std::env;
 use std::fs;
 use std::io::{self, Write};
+use std::process::exit;
 
-fn tokenize(char: char) -> (String, String, String) {
+fn tokenize(char: char) -> (i32, String, String, String) {
+    let mut ret = 0;
     let (token_type, literal) = match char {
         '(' => ("LEFT_PAREN", "null"),
         ')' => ("RIGHT_PAREN", "null"),
@@ -15,20 +16,35 @@ fn tokenize(char: char) -> (String, String, String) {
         '+' => ("PLUS", "null"),
         ';' => ("SEMICOLON", "null"),
         '*' => ("STAR", "null"),
-        _ => panic!("Unknown character: {}", char),
+        _ => {
+            ret = 65;
+            ("", "")
+        }
     };
     (
+        ret,
         token_type.to_string(),
         char.to_string(),
         literal.to_string(),
     )
 }
 
-fn scan(input: &str) {
-    for char in input.chars() {
-        let (token_type, lexeme, literal) = tokenize(char);
-        println!("{} {} {}", token_type, lexeme, literal);
+fn scan(input: &str) -> i32 {
+    let mut exit_code = 0;
+    let lines = input.lines();
+    for (i, line) in lines.enumerate() {
+        let line_num = i + 1;
+        for char in line.chars() {
+            let (ret, token_type, lexeme, literal) = tokenize(char);
+            if ret == 0 {
+                println!("{} {} {}", token_type, lexeme, literal);
+            } else {
+                exit_code = ret;
+                eprintln!("[line {}] Error: Unexpected character: {}", line_num, char);
+            }
+        }
     }
+    exit_code
 }
 
 fn main() {
@@ -50,10 +66,9 @@ fn main() {
                 String::new()
             });
 
-            if !file_contents.is_empty() {
-                scan(&file_contents);
-            }
+            let exit_code = scan(&file_contents);
             println!("EOF  null");
+            exit(exit_code);
         }
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
