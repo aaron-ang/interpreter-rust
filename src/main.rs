@@ -9,6 +9,12 @@ fn tokenize(char: char) -> (String, String, String) {
         ')' => ("RIGHT_PAREN", "null"),
         '{' => ("LEFT_BRACE", "null"),
         '}' => ("RIGHT_BRACE", "null"),
+        ',' => ("COMMA", "null"),
+        '.' => ("DOT", "null"),
+        '-' => ("MINUS", "null"),
+        '+' => ("PLUS", "null"),
+        ';' => ("SEMICOLON", "null"),
+        '*' => ("STAR", "null"),
         _ => panic!("Unknown character: {}", char),
     };
     (
