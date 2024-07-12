@@ -12,10 +12,15 @@ fn tokenize(input: &str) -> i32 {
     let mut exit_code = 0;
     let lines = input.lines();
     let mut tokens = vec![];
+
     for (i, line) in lines.enumerate() {
         let line_num = i + 1;
         let mut chars = line.chars().peekable();
+
         while let Some(char) = chars.next() {
+            if char == ' ' || char == '\t' {
+                continue;
+            }
             if let Some(token) = Token::get_token(char, &mut chars) {
                 if token.token_type == TokenType::COMMENT {
                     break;
@@ -27,9 +32,11 @@ fn tokenize(input: &str) -> i32 {
             }
         }
     }
+
     for token in tokens {
         println!("{}", token);
     }
+
     exit_code
 }
 
