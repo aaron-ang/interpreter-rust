@@ -20,6 +20,11 @@ pub enum TokenType {
 
     BANG,
     BANG_EQUAL,
+
+    LESS,
+    LESS_EQUAL,
+    GREATER,
+    GREATER_EQUAL,
 }
 
 pub struct Token {
@@ -62,6 +67,20 @@ impl Token {
                     (TokenType::BANG_EQUAL, "!=".to_string())
                 }
                 _ => (TokenType::BANG, c.to_string()),
+            },
+            '<' => match chars.peek() {
+                Some('=') => {
+                    chars.next();
+                    (TokenType::LESS_EQUAL, "<=".to_string())
+                }
+                _ => (TokenType::LESS, c.to_string()),
+            },
+            '>' => match chars.peek() {
+                Some('=') => {
+                    chars.next();
+                    (TokenType::GREATER_EQUAL, ">=".to_string())
+                }
+                _ => (TokenType::GREATER, c.to_string()),
             },
             _ => return None,
         };
