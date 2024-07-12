@@ -31,6 +31,8 @@ pub enum TokenType {
 
     STRING,
     NUMBER,
+
+    IDENTIFIER,
 }
 
 pub struct Token {
@@ -142,11 +144,29 @@ impl Token {
                     if !has_dot {
                         number.push('.');
                         number.push('0');
+                    } else {
+                        while number.chars().last() == Some('0')
+                            && number.chars().nth_back(1) == Some('0')
+                        {
+                            number.pop();
+                        }
                     }
                     (TokenType::NUMBER, value, Some(number))
                 } else {
                     (TokenType::NUMBER, number.clone(), Some(number))
                 }
+            }
+            c if c.is_alphabetic() || c == '_' => {
+                let mut identifier = String::from(c);
+                while let Some(p) = chars.peek() {
+                    if p.is_alphanumeric() || *p == '_' {
+                        identifier.push(*p);
+                        chars.next();
+                    } else {
+                        break;
+                    }
+                }
+                (TokenType::IDENTIFIER, identifier.clone(), None)
             }
             _ => {
                 eprintln!("[line {}] Error: Unexpected character: {}", line_num, c);
