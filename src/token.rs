@@ -33,6 +33,23 @@ pub enum TokenType {
     NUMBER,
 
     IDENTIFIER,
+
+    AND,
+    CLASS,
+    ELSE,
+    FALSE,
+    FOR,
+    FUN,
+    IF,
+    NIL,
+    OR,
+    PRINT,
+    RETURN,
+    SUPER,
+    THIS,
+    TRUE,
+    VAR,
+    WHILE,
 }
 
 pub struct Token {
@@ -166,7 +183,26 @@ impl Token {
                         break;
                     }
                 }
-                (TokenType::IDENTIFIER, identifier.clone(), None)
+                let token_type = match identifier.as_str() {
+                    "and" => TokenType::AND,
+                    "class" => TokenType::CLASS,
+                    "else" => TokenType::ELSE,
+                    "false" => TokenType::FALSE,
+                    "for" => TokenType::FOR,
+                    "fun" => TokenType::FUN,
+                    "if" => TokenType::IF,
+                    "nil" => TokenType::NIL,
+                    "or" => TokenType::OR,
+                    "print" => TokenType::PRINT,
+                    "return" => TokenType::RETURN,
+                    "super" => TokenType::SUPER,
+                    "this" => TokenType::THIS,
+                    "true" => TokenType::TRUE,
+                    "var" => TokenType::VAR,
+                    "while" => TokenType::WHILE,
+                    _ => TokenType::IDENTIFIER,
+                };
+                (token_type, identifier, None)
             }
             _ => {
                 eprintln!("[line {}] Error: Unexpected character: {}", line_num, c);
