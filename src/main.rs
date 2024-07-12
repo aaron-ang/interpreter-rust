@@ -3,45 +3,27 @@ use std::fs;
 use std::io::{self, Write};
 use std::process::exit;
 
-fn tokenize(char: char) -> (i32, String, String, String) {
-    let mut ret = 0;
-    let (token_type, literal) = match char {
-        '(' => ("LEFT_PAREN", "null"),
-        ')' => ("RIGHT_PAREN", "null"),
-        '{' => ("LEFT_BRACE", "null"),
-        '}' => ("RIGHT_BRACE", "null"),
-        ',' => ("COMMA", "null"),
-        '.' => ("DOT", "null"),
-        '-' => ("MINUS", "null"),
-        '+' => ("PLUS", "null"),
-        ';' => ("SEMICOLON", "null"),
-        '*' => ("STAR", "null"),
-        _ => {
-            ret = 65;
-            ("", "")
-        }
-    };
-    (
-        ret,
-        token_type.to_string(),
-        char.to_string(),
-        literal.to_string(),
-    )
-}
+mod token;
 
-fn scan(input: &str) -> i32 {
+use crate::token::Token;
+
+fn tokenize(input: &str) -> i32 {
     let mut exit_code = 0;
     let lines = input.lines();
     for (i, line) in lines.enumerate() {
         let line_num = i + 1;
-        for char in line.chars() {
-            let (ret, token_type, lexeme, literal) = tokenize(char);
-            if ret == 0 {
-                println!("{} {} {}", token_type, lexeme, literal);
+        let mut chars = line.chars().peekable();
+        let mut tokens = vec![];
+        while let Some(char) = chars.next() {
+            if let Some(token) = Token::get_token(char, &mut chars) {
+                tokens.push(token);
             } else {
-                exit_code = ret;
                 eprintln!("[line {}] Error: Unexpected character: {}", line_num, char);
+                exit_code = 65;
             }
+        }
+        for token in tokens {
+            println!("{}", token);
         }
     }
     exit_code
@@ -66,7 +48,7 @@ fn main() {
                 String::new()
             });
 
-            let exit_code = scan(&file_contents);
+            let exit_code = tokenize(&file_contents);
             println!("EOF  null");
             exit(exit_code);
         }
