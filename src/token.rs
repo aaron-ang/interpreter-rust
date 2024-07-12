@@ -30,6 +30,7 @@ pub enum TokenType {
     COMMENT,
 
     STRING,
+    NUMBER,
 }
 
 pub struct Token {
@@ -39,19 +40,11 @@ pub struct Token {
 }
 
 impl Token {
-    pub fn new(_type: TokenType, _lexeme: String) -> Token {
-        Token {
-            token_type: _type,
-            _lexeme,
-            _literal: None,
-        }
-    }
-
-    pub fn new_with_literal(token_type: TokenType, lexeme: String, literal: String) -> Token {
+    pub fn new(token_type: TokenType, _lexeme: String, _literal: Option<String>) -> Token {
         Token {
             token_type,
-            _lexeme: lexeme,
-            _literal: Some(literal),
+            _lexeme,
+            _literal,
         }
     }
 
@@ -60,48 +53,48 @@ impl Token {
         chars: &mut std::iter::Peekable<std::str::Chars>,
         line_num: usize,
     ) -> Option<Token> {
-        let (token_type, lexeme) = match c {
-            '(' => (TokenType::LEFT_PAREN, c.to_string()),
-            ')' => (TokenType::RIGHT_PAREN, c.to_string()),
-            '{' => (TokenType::LEFT_BRACE, c.to_string()),
-            '}' => (TokenType::RIGHT_BRACE, c.to_string()),
-            ',' => (TokenType::COMMA, c.to_string()),
-            '.' => (TokenType::DOT, c.to_string()),
-            '-' => (TokenType::MINUS, c.to_string()),
-            '+' => (TokenType::PLUS, c.to_string()),
-            ';' => (TokenType::SEMICOLON, c.to_string()),
-            '*' => (TokenType::STAR, c.to_string()),
+        let (token_type, lexeme, literal): (TokenType, String, Option<String>) = match c {
+            '(' => (TokenType::LEFT_PAREN, c.to_string(), None),
+            ')' => (TokenType::RIGHT_PAREN, c.to_string(), None),
+            '{' => (TokenType::LEFT_BRACE, c.to_string(), None),
+            '}' => (TokenType::RIGHT_BRACE, c.to_string(), None),
+            ',' => (TokenType::COMMA, c.to_string(), None),
+            '.' => (TokenType::DOT, c.to_string(), None),
+            '-' => (TokenType::MINUS, c.to_string(), None),
+            '+' => (TokenType::PLUS, c.to_string(), None),
+            ';' => (TokenType::SEMICOLON, c.to_string(), None),
+            '*' => (TokenType::STAR, c.to_string(), None),
             '=' => match chars.peek() {
                 Some('=') => {
                     chars.next();
-                    (TokenType::EQUAL_EQUAL, "==".to_string())
+                    (TokenType::EQUAL_EQUAL, "==".to_string(), None)
                 }
-                _ => (TokenType::EQUAL, c.to_string()),
+                _ => (TokenType::EQUAL, c.to_string(), None),
             },
             '!' => match chars.peek() {
                 Some('=') => {
                     chars.next();
-                    (TokenType::BANG_EQUAL, "!=".to_string())
+                    (TokenType::BANG_EQUAL, "!=".to_string(), None)
                 }
-                _ => (TokenType::BANG, c.to_string()),
+                _ => (TokenType::BANG, c.to_string(), None),
             },
             '<' => match chars.peek() {
                 Some('=') => {
                     chars.next();
-                    (TokenType::LESS_EQUAL, "<=".to_string())
+                    (TokenType::LESS_EQUAL, "<=".to_string(), None)
                 }
-                _ => (TokenType::LESS, c.to_string()),
+                _ => (TokenType::LESS, c.to_string(), None),
             },
             '>' => match chars.peek() {
                 Some('=') => {
                     chars.next();
-                    (TokenType::GREATER_EQUAL, ">=".to_string())
+                    (TokenType::GREATER_EQUAL, ">=".to_string(), None)
                 }
-                _ => (TokenType::GREATER, c.to_string()),
+                _ => (TokenType::GREATER, c.to_string(), None),
             },
             '/' => match chars.peek() {
-                Some('/') => (TokenType::COMMENT, "//".to_string()),
-                _ => (TokenType::SLASH, c.to_string()),
+                Some('/') => (TokenType::COMMENT, "//".to_string(), None),
+                _ => (TokenType::SLASH, c.to_string(), None),
             },
             '"' => {
                 let mut string = String::new();
@@ -116,7 +109,44 @@ impl Token {
                     eprintln!("[line {}] Error: Unterminated string.", line_num);
                     return None;
                 }
-                (TokenType::STRING, string)
+                (
+                    TokenType::STRING,
+                    string.clone(),
+                    Some(string[1..string.len() - 1].to_string()),
+                )
+            }
+            c if c.is_ascii_digit() => {
+                let mut number = String::from(c);
+                let mut has_dot = false;
+                let mut peekable = chars.clone().peekable();
+                while let Some(p) = peekable.next() {
+                    if p.is_ascii_digit() {
+                        number.push(p);
+                        chars.next();
+                    } else {
+                        if p == '.'
+                            && !has_dot
+                            && peekable.peek().is_some_and(|p| p.is_ascii_digit())
+                        {
+                            number.push(p);
+                            chars.next();
+                            has_dot = true;
+                        } else {
+                            break;
+                        }
+                    }
+                }
+
+                if number.chars().last().is_some_and(|c| c.is_ascii_digit()) {
+                    let value = number.clone();
+                    if !has_dot {
+                        number.push('.');
+                        number.push('0');
+                    }
+                    (TokenType::NUMBER, value, Some(number))
+                } else {
+                    (TokenType::NUMBER, number.clone(), Some(number))
+                }
             }
             _ => {
                 eprintln!("[line {}] Error: Unexpected character: {}", line_num, c);
@@ -124,15 +154,7 @@ impl Token {
             }
         };
 
-        if token_type == TokenType::STRING {
-            Some(Token::new_with_literal(
-                token_type,
-                lexeme.clone(),
-                lexeme[1..lexeme.len() - 1].to_string(),
-            ))
-        } else {
-            Some(Token::new(token_type, lexeme))
-        }
+        Some(Token::new(token_type, lexeme, literal))
     }
 }
 
