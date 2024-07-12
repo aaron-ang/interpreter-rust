@@ -17,6 +17,9 @@ pub enum TokenType {
 
     EQUAL,
     EQUAL_EQUAL,
+
+    BANG,
+    BANG_EQUAL,
 }
 
 pub struct Token {
@@ -52,6 +55,13 @@ impl Token {
                     (TokenType::EQUAL_EQUAL, "==".to_string())
                 }
                 _ => (TokenType::EQUAL, c.to_string()),
+            },
+            '!' => match chars.peek() {
+                Some('=') => {
+                    chars.next();
+                    (TokenType::BANG_EQUAL, "!=".to_string())
+                }
+                _ => (TokenType::BANG, c.to_string()),
             },
             _ => return None,
         };
