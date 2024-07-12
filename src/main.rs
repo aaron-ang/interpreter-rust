@@ -21,13 +21,12 @@ fn tokenize(input: &str) -> i32 {
             if char == ' ' || char == '\t' {
                 continue;
             }
-            if let Some(token) = Token::get_token(char, &mut chars) {
+            if let Some(token) = Token::get_token(char, &mut chars, line_num) {
                 if token.token_type == TokenType::COMMENT {
-                    break;
+                    break; // go to next line
                 }
                 tokens.push(token);
             } else {
-                eprintln!("[line {}] Error: Unexpected character: {}", line_num, char);
                 exit_code = 65;
             }
         }

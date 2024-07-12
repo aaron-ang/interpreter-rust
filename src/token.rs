@@ -1,7 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Debug)]
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
     LEFT_PAREN,
@@ -29,6 +28,8 @@ pub enum TokenType {
 
     SLASH,
     COMMENT,
+
+    STRING,
 }
 
 pub struct Token {
@@ -46,7 +47,19 @@ impl Token {
         }
     }
 
-    pub fn get_token(c: char, chars: &mut std::iter::Peekable<std::str::Chars>) -> Option<Token> {
+    pub fn new_with_literal(token_type: TokenType, lexeme: String, literal: String) -> Token {
+        Token {
+            token_type,
+            _lexeme: lexeme,
+            _literal: Some(literal),
+        }
+    }
+
+    pub fn get_token(
+        c: char,
+        chars: &mut std::iter::Peekable<std::str::Chars>,
+        line_num: usize,
+    ) -> Option<Token> {
         let (token_type, lexeme) = match c {
             '(' => (TokenType::LEFT_PAREN, c.to_string()),
             ')' => (TokenType::RIGHT_PAREN, c.to_string()),
@@ -90,9 +103,36 @@ impl Token {
                 Some('/') => (TokenType::COMMENT, "//".to_string()),
                 _ => (TokenType::SLASH, c.to_string()),
             },
-            _ => return None,
+            '"' => {
+                let mut string = String::new();
+                string.push(c);
+                while let Some(c) = chars.next() {
+                    string.push(c);
+                    if c == '"' {
+                        break;
+                    }
+                }
+                if string.chars().last() != Some('"') {
+                    eprintln!("[line {}] Error: Unterminated string.", line_num);
+                    return None;
+                }
+                (TokenType::STRING, string)
+            }
+            _ => {
+                eprintln!("[line {}] Error: Unexpected character: {}", line_num, c);
+                return None;
+            }
         };
-        Some(Token::new(token_type, lexeme.to_string()))
+
+        if token_type == TokenType::STRING {
+            Some(Token::new_with_literal(
+                token_type,
+                lexeme.clone(),
+                lexeme[1..lexeme.len() - 1].to_string(),
+            ))
+        } else {
+            Some(Token::new(token_type, lexeme))
+        }
     }
 }
 
