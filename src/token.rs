@@ -1,6 +1,7 @@
 use std::fmt::Display;
 
 #[derive(Debug)]
+#[derive(PartialEq)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
     LEFT_PAREN,
@@ -25,10 +26,13 @@ pub enum TokenType {
     LESS_EQUAL,
     GREATER,
     GREATER_EQUAL,
+
+    SLASH,
+    COMMENT,
 }
 
 pub struct Token {
-    _type: TokenType,
+    pub token_type: TokenType,
     _lexeme: String,
     _literal: Option<String>,
 }
@@ -36,7 +40,7 @@ pub struct Token {
 impl Token {
     pub fn new(_type: TokenType, _lexeme: String) -> Token {
         Token {
-            _type,
+            token_type: _type,
             _lexeme,
             _literal: None,
         }
@@ -82,6 +86,10 @@ impl Token {
                 }
                 _ => (TokenType::GREATER, c.to_string()),
             },
+            '/' => match chars.peek() {
+                Some('/') => (TokenType::COMMENT, "//".to_string()),
+                _ => (TokenType::SLASH, c.to_string()),
+            },
             _ => return None,
         };
         Some(Token::new(token_type, lexeme.to_string()))
@@ -93,7 +101,7 @@ impl Display for Token {
         write!(
             f,
             "{:?} {} {}",
-            self._type,
+            self.token_type,
             self._lexeme,
             self._literal.clone().unwrap_or("null".to_string())
         )
