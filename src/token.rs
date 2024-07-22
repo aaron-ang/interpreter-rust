@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
     LEFT_PAREN,
@@ -74,6 +74,7 @@ pub fn get_token_type(identifier: &str) -> TokenType {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,

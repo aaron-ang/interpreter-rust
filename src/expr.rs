@@ -1,11 +1,14 @@
 use std::fmt::Display;
 
+use crate::token::Token;
+
 #[derive(Debug)]
 pub enum Expr {
     Bool(bool),
     Number(String),
     String(String),
     Group(Vec<Expr>),
+    Unary(Token, Box<Expr>),
     Nil,
 }
 
@@ -16,12 +19,17 @@ impl Display for Expr {
             Expr::Number(n) => write!(f, "{n}"),
             Expr::String(s) => write!(f, "{s}"),
             Expr::Group(g) => {
-                write!(f, "(group ")?;
-                for expr in g {
-                    write!(f, "{expr}")?;
-                }
-                write!(f, ")")?;
-                Ok(())
+                write!(
+                    f,
+                    "(group {})",
+                    g.iter()
+                        .map(|e| format!("{e}"))
+                        .collect::<Vec<String>>()
+                        .join(" ")
+                )
+            }
+            Expr::Unary(opertr, expr) => {
+                write!(f, "({} {})", opertr.lexeme, expr)
             }
             Expr::Nil => write!(f, "nil"),
         }

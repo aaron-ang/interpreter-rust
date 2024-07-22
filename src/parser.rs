@@ -52,6 +52,10 @@ fn get_expr(token: &Token, tokens: &mut Peekable<Iter<Token>>) -> Expr {
             }
             Expr::Group(group)
         }
+        TokenType::BANG | TokenType::MINUS => Expr::Unary(
+            token.clone(),
+            Box::new(get_expr(tokens.next().unwrap(), tokens)),
+        ),
         TokenType::NIL => Expr::Nil,
         _ => todo!(),
     };
