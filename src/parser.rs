@@ -19,6 +19,7 @@ impl<'a> Parser<'a> {
                 TokenType::TRUE => Expr::Bool(true),
                 TokenType::FALSE => Expr::Bool(false),
                 TokenType::NUMBER => Expr::Number(token.literal.clone().unwrap()),
+                TokenType::STRING => Expr::String(token.literal.clone().unwrap()),
                 TokenType::NIL => Expr::Nil,
                 _ => todo!(),
             };
