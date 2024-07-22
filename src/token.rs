@@ -52,17 +52,39 @@ pub enum TokenType {
     WHILE,
 }
 
+pub fn get_token_type(identifier: &str) -> TokenType {
+    match identifier {
+        "and" => TokenType::AND,
+        "class" => TokenType::CLASS,
+        "else" => TokenType::ELSE,
+        "false" => TokenType::FALSE,
+        "for" => TokenType::FOR,
+        "fun" => TokenType::FUN,
+        "if" => TokenType::IF,
+        "nil" => TokenType::NIL,
+        "or" => TokenType::OR,
+        "print" => TokenType::PRINT,
+        "return" => TokenType::RETURN,
+        "super" => TokenType::SUPER,
+        "this" => TokenType::THIS,
+        "true" => TokenType::TRUE,
+        "var" => TokenType::VAR,
+        "while" => TokenType::WHILE,
+        _ => TokenType::IDENTIFIER,
+    }
+}
+
 pub struct Token {
     pub token_type: TokenType,
-    _lexeme: String,
+    pub lexeme: String,
     _literal: Option<String>,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, _lexeme: String, _literal: Option<String>) -> Token {
+    pub fn new(token_type: TokenType, lexeme: String, _literal: Option<String>) -> Token {
         Token {
             token_type,
-            _lexeme,
+            lexeme,
             _literal,
         }
     }
@@ -183,25 +205,7 @@ impl Token {
                         break;
                     }
                 }
-                let token_type = match identifier.as_str() {
-                    "and" => TokenType::AND,
-                    "class" => TokenType::CLASS,
-                    "else" => TokenType::ELSE,
-                    "false" => TokenType::FALSE,
-                    "for" => TokenType::FOR,
-                    "fun" => TokenType::FUN,
-                    "if" => TokenType::IF,
-                    "nil" => TokenType::NIL,
-                    "or" => TokenType::OR,
-                    "print" => TokenType::PRINT,
-                    "return" => TokenType::RETURN,
-                    "super" => TokenType::SUPER,
-                    "this" => TokenType::THIS,
-                    "true" => TokenType::TRUE,
-                    "var" => TokenType::VAR,
-                    "while" => TokenType::WHILE,
-                    _ => TokenType::IDENTIFIER,
-                };
+                let token_type = get_token_type(&identifier);
                 (token_type, identifier, None)
             }
             _ => {
@@ -220,7 +224,7 @@ impl Display for Token {
             f,
             "{:?} {} {}",
             self.token_type,
-            self._lexeme,
+            self.lexeme,
             self._literal.clone().unwrap_or("null".to_string())
         )
     }

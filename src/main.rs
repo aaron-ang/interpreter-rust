@@ -2,17 +2,30 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::process::exit;
+use std::str::Lines;
 
+mod expr;
+mod parser;
 mod token;
 
-use crate::token::Token;
-use crate::token::TokenType;
+use crate::{
+    parser::Parser,
+    token::{Token, TokenType},
+};
 
-fn tokenize(input: &str) -> i32 {
-    let mut exit_code = 0;
+fn tokenize(input: &str) {
     let lines = input.lines();
-    let mut tokens = vec![];
+    let (tokens, exit_code) = tokenize_lines(lines);
+    for token in tokens {
+        println!("{}", token);
+    }
+    println!("EOF  null");
+    exit(exit_code);
+}
 
+fn tokenize_lines(lines: Lines) -> (Vec<Token>, i32) {
+    let mut exit_code = 0;
+    let mut tokens = vec![];
     for (i, line) in lines.enumerate() {
         let line_num = i + 1;
         let mut chars = line.chars().peekable();
@@ -31,12 +44,16 @@ fn tokenize(input: &str) -> i32 {
             }
         }
     }
+    return (tokens, exit_code);
+}
 
-    for token in tokens {
-        println!("{}", token);
+fn parse(input: &str) {
+    let tokens = tokenize_lines(input.lines()).0;
+    let parser = Parser::new(&tokens);
+    let exprs = parser.parse();
+    for expr in exprs {
+        println!("{}", expr);
     }
-
-    exit_code
 }
 
 fn main() {
@@ -48,18 +65,14 @@ fn main() {
 
     let command = &args[1];
     let filename = &args[2];
+    let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
+        writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
+        String::new()
+    });
 
     match command.as_str() {
-        "tokenize" => {
-            let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-                writeln!(io::stderr(), "Failed to read file {}", filename).unwrap();
-                String::new()
-            });
-
-            let exit_code = tokenize(&file_contents);
-            println!("EOF  null");
-            exit(exit_code);
-        }
+        "tokenize" => tokenize(&file_contents),
+        "parse" => parse(&file_contents),
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
             return;
