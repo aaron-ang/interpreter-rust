@@ -38,7 +38,6 @@ impl<'a> Parser<'a> {
             TokenType::LEFT_PAREN => {
                 while let Some(token) = tokens.next() {
                     if token.token_type == TokenType::RIGHT_PAREN {
-                        tokens.next();
                         break;
                     }
                     if tokens.peek().is_none() {
@@ -54,14 +53,26 @@ impl<'a> Parser<'a> {
                 }
                 Expr::Group(self.exprs.drain(..).collect())
             }
-            TokenType::BANG | TokenType::MINUS => Expr::Unary(
+            TokenType::BANG => Expr::Unary(
                 token.clone(),
                 Box::new(self.get_expr(tokens.next().unwrap(), tokens)),
             ),
-            TokenType::STAR | TokenType::SLASH => {
+            TokenType::STAR | TokenType::SLASH | TokenType::PLUS => {
                 let left = self.exprs.pop().unwrap();
                 let right = self.get_expr(tokens.next().unwrap(), tokens);
                 Expr::Binary(token.clone(), Box::new(left), Box::new(right))
+            }
+            TokenType::MINUS => {
+                if self.exprs.is_empty() {
+                    Expr::Unary(
+                        token.clone(),
+                        Box::new(self.get_expr(tokens.next().unwrap(), tokens)),
+                    )
+                } else {
+                    let left = self.exprs.pop().unwrap();
+                    let right = self.get_expr(tokens.next().unwrap(), tokens);
+                    Expr::Binary(token.clone(), Box::new(left), Box::new(right))
+                }
             }
             TokenType::NIL => Expr::Nil,
             _ => todo!(),
