@@ -2,13 +2,14 @@ use std::fmt::Display;
 
 use crate::token::Token;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum Expr {
     Bool(bool),
     Number(String),
     String(String),
     Group(Vec<Expr>),
     Unary(Token, Box<Expr>),
+    Binary(Token, Box<Expr>, Box<Expr>),
     Nil,
 }
 
@@ -28,8 +29,11 @@ impl Display for Expr {
                         .join(" ")
                 )
             }
-            Expr::Unary(opertr, expr) => {
-                write!(f, "({} {})", opertr.lexeme, expr)
+            Expr::Unary(op, expr) => {
+                write!(f, "({} {})", op.lexeme, expr)
+            }
+            Expr::Binary(op, left, right) => {
+                write!(f, "({} {} {})", op.lexeme, left, right)
             }
             Expr::Nil => write!(f, "nil"),
         }
