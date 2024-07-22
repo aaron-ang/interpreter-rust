@@ -77,15 +77,15 @@ pub fn get_token_type(identifier: &str) -> TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
-    _literal: Option<String>,
+    pub literal: Option<String>,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: String, _literal: Option<String>) -> Token {
+    pub fn new(token_type: TokenType, lexeme: String, literal: Option<String>) -> Token {
         Token {
             token_type,
             lexeme,
-            _literal,
+            literal,
         }
     }
 
@@ -225,7 +225,7 @@ impl Display for Token {
             "{:?} {} {}",
             self.token_type,
             self.lexeme,
-            self._literal.clone().unwrap_or("null".to_string())
+            self.literal.clone().unwrap_or("null".to_string())
         )
     }
 }

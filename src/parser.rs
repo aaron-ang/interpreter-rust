@@ -18,6 +18,7 @@ impl<'a> Parser<'a> {
             let expr = match token.token_type {
                 TokenType::TRUE => Expr::Bool(true),
                 TokenType::FALSE => Expr::Bool(false),
+                TokenType::NUMBER => Expr::Number(token.literal.clone().unwrap()),
                 TokenType::NIL => Expr::Nil,
                 _ => todo!(),
             };
