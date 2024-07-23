@@ -113,95 +113,76 @@ impl Token {
             '+' => (TokenType::PLUS, c.to_string(), None),
             ';' => (TokenType::SEMICOLON, c.to_string(), None),
             '*' => (TokenType::STAR, c.to_string(), None),
-            '=' => match chars.peek() {
-                Some('=') => {
+            '=' | '!' | '<' | '>' => {
+                let (single_char_token, double_char_token) = match c {
+                    '=' => (TokenType::EQUAL, TokenType::EQUAL_EQUAL),
+                    '!' => (TokenType::BANG, TokenType::BANG_EQUAL),
+                    '<' => (TokenType::LESS, TokenType::LESS_EQUAL),
+                    '>' => (TokenType::GREATER, TokenType::GREATER_EQUAL),
+                    _ => unreachable!(),
+                };
+
+                if chars.peek() == Some(&'=') {
                     chars.next();
-                    (TokenType::EQUAL_EQUAL, "==".to_string(), None)
+                    (double_char_token, format!("{}=", c), None)
+                } else {
+                    (single_char_token, c.to_string(), None)
                 }
-                _ => (TokenType::EQUAL, c.to_string(), None),
-            },
-            '!' => match chars.peek() {
-                Some('=') => {
-                    chars.next();
-                    (TokenType::BANG_EQUAL, "!=".to_string(), None)
-                }
-                _ => (TokenType::BANG, c.to_string(), None),
-            },
-            '<' => match chars.peek() {
-                Some('=') => {
-                    chars.next();
-                    (TokenType::LESS_EQUAL, "<=".to_string(), None)
-                }
-                _ => (TokenType::LESS, c.to_string(), None),
-            },
-            '>' => match chars.peek() {
-                Some('=') => {
-                    chars.next();
-                    (TokenType::GREATER_EQUAL, ">=".to_string(), None)
-                }
-                _ => (TokenType::GREATER, c.to_string(), None),
-            },
+            }
             '/' => match chars.peek() {
                 Some('/') => (TokenType::COMMENT, "//".to_string(), None),
                 _ => (TokenType::SLASH, c.to_string(), None),
             },
             '"' => {
-                let mut string = String::new();
-                string.push(c);
+                let mut lexeme = String::from(c);
                 while let Some(c) = chars.next() {
-                    string.push(c);
+                    lexeme.push(c);
                     if c == '"' {
                         break;
                     }
                 }
-                if string.chars().last() != Some('"') {
+                if lexeme.chars().last() != Some('"') {
                     eprintln!("[line {}] Error: Unterminated string.", line_num);
                     return None;
                 }
-                (
-                    TokenType::STRING,
-                    string.clone(),
-                    Some(string[1..string.len() - 1].to_string()),
-                )
+                // remove quotes
+                let literal = lexeme[1..lexeme.len() - 1].to_string();
+                (TokenType::STRING, lexeme, Some(literal))
             }
             c if c.is_ascii_digit() => {
-                let mut number = String::from(c);
+                let mut lexeme = String::from(c);
                 let mut has_dot = false;
                 let mut peekable = chars.clone().peekable();
-                while let Some(p) = peekable.next() {
-                    if p.is_ascii_digit() {
-                        number.push(p);
-                        chars.next();
-                    } else {
-                        if p == '.'
-                            && !has_dot
-                            && peekable.peek().is_some_and(|p| p.is_ascii_digit())
-                        {
-                            number.push(p);
+
+                while let Some(next_char) = peekable.next() {
+                    match next_char {
+                        '0'..='9' => {
+                            lexeme.push(next_char);
                             chars.next();
-                            has_dot = true;
-                        } else {
-                            break;
                         }
+                        '.' if !has_dot && peekable.peek().is_some_and(|p| p.is_ascii_digit()) => {
+                            lexeme.push(next_char);
+                            has_dot = true;
+                            chars.next();
+                        }
+                        _ => break,
                     }
                 }
 
-                if number.chars().last().is_some_and(|c| c.is_ascii_digit()) {
-                    let value = number.clone();
+                let mut literal = lexeme.clone();
+                if literal.chars().last().is_some_and(|c| c.is_ascii_digit()) {
                     if !has_dot {
-                        number.push('.');
-                        number.push('0');
+                        literal.push('.');
+                        literal.push('0');
                     } else {
-                        while number.chars().last() == Some('0')
-                            && number.chars().nth_back(1) == Some('0')
+                        while literal.chars().last() == Some('0')
+                            && literal.chars().nth_back(1) == Some('0')
                         {
-                            number.pop();
+                            literal.pop();
                         }
                     }
-                    (TokenType::NUMBER, value, Some(number))
-                } else {
-                    (TokenType::NUMBER, number.clone(), Some(number))
                 }
+                (TokenType::NUMBER, lexeme, Some(literal))
             }
             c if c.is_alphabetic() || c == '_' => {
                 let mut identifier = String::from(c);
