@@ -57,7 +57,13 @@ impl<'a> Parser<'a> {
                 token.clone(),
                 Box::new(self.get_expr(tokens.next().unwrap(), tokens)),
             ),
-            TokenType::STAR | TokenType::SLASH | TokenType::PLUS => {
+            TokenType::STAR
+            | TokenType::SLASH
+            | TokenType::PLUS
+            | TokenType::LESS
+            | TokenType::GREATER
+            | TokenType::LESS_EQUAL
+            | TokenType::GREATER_EQUAL => {
                 let left = self.exprs.pop().unwrap();
                 let right = self.get_expr(tokens.next().unwrap(), tokens);
                 Expr::Binary(token.clone(), Box::new(left), Box::new(right))
