@@ -79,14 +79,21 @@ pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
     pub literal: Option<String>,
+    pub line_num: usize,
 }
 
 impl Token {
-    pub fn new(token_type: TokenType, lexeme: String, literal: Option<String>) -> Token {
+    pub fn new(
+        token_type: TokenType,
+        lexeme: String,
+        literal: Option<String>,
+        line_num: usize,
+    ) -> Token {
         Token {
             token_type,
             lexeme,
             literal,
+            line_num,
         }
     }
 
@@ -215,7 +222,7 @@ impl Token {
             }
         };
 
-        Some(Token::new(token_type, lexeme, literal))
+        Some(Token::new(token_type, lexeme, literal, line_num))
     }
 }
 

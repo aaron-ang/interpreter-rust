@@ -47,11 +47,15 @@ impl<'a> Parser<'a> {
                     let expr = self.get_expr(token, tokens);
                     self.exprs.push(expr);
                 }
+                // no expression was found after the left parenthesis
                 if self.exprs.is_empty() {
-                    eprintln!("Error: Missing expression in parentheses.");
-                    exit(65);
+                    expr_error(token)
                 }
                 Expr::Group(self.exprs.drain(..).collect())
+            }
+            TokenType::RIGHT_PAREN => {
+                // right parenthesis was reached before the end of the expression
+                expr_error(token)
             }
             TokenType::BANG => Expr::Unary(
                 token.clone(),
@@ -66,19 +70,30 @@ impl<'a> Parser<'a> {
             | TokenType::GREATER_EQUAL
             | TokenType::EQUAL_EQUAL
             | TokenType::BANG_EQUAL => {
+                if self.exprs.is_empty() {
+                    expr_error(token)
+                }
                 let left = self.exprs.pop().unwrap();
-                let right = self.get_expr(tokens.next().unwrap(), tokens);
+                let next_token = tokens.next();
+                if next_token.is_none() {
+                    expr_error(token)
+                }
+                let right = self.get_expr(next_token.unwrap(), tokens);
                 Expr::Binary(token.clone(), Box::new(left), Box::new(right))
             }
             TokenType::MINUS => {
+                let next_token = tokens.next();
+                if next_token.is_none() {
+                    expr_error(token)
+                }
                 if self.exprs.is_empty() {
                     Expr::Unary(
                         token.clone(),
-                        Box::new(self.get_expr(tokens.next().unwrap(), tokens)),
+                        Box::new(self.get_expr(next_token.unwrap(), tokens)),
                     )
                 } else {
                     let left = self.exprs.pop().unwrap();
-                    let right = self.get_expr(tokens.next().unwrap(), tokens);
+                    let right = self.get_expr(next_token.unwrap(), tokens);
                     Expr::Binary(token.clone(), Box::new(left), Box::new(right))
                 }
             }
@@ -87,4 +102,12 @@ impl<'a> Parser<'a> {
         };
         expr
     }
+}
+
+fn expr_error(token: &Token) -> ! {
+    eprintln!(
+        "[line {}] Error at '{}': Expect expression.",
+        token.line_num, token.lexeme
+    );
+    exit(65);
 }

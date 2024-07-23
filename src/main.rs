@@ -48,7 +48,10 @@ fn tokenize_lines(lines: Lines) -> (Vec<Token>, i32) {
 }
 
 fn parse(input: &str) {
-    let tokens = tokenize_lines(input.lines()).0;
+    let (tokens, exit_code) = tokenize_lines(input.lines());
+    if exit_code != 0 {
+        exit(exit_code);
+    }
     let mut parser = Parser::new(&tokens);
     let exprs = parser.parse();
     for expr in exprs {
