@@ -214,7 +214,7 @@ impl Display for Token {
             "{:?} {} {}",
             self.token_type,
             self.lexeme,
-            self.literal.clone().unwrap_or("null".to_string())
+            self.literal.as_ref().unwrap_or(&"null".to_string())
         )
     }
 }
