@@ -1,8 +1,8 @@
 use std::iter::Peekable;
+use std::process::exit;
 use std::slice::Iter;
 
 use crate::{
-    exit,
     expr::Expr,
     token::{Token, TokenType},
 };

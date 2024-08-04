@@ -4,14 +4,14 @@ use std::io::{self, Write};
 use std::process::exit;
 use std::str::Lines;
 
+mod evaluate;
 mod expr;
 mod parser;
 mod token;
 
-use crate::{
-    parser::Parser,
-    token::{Token, TokenType},
-};
+use evaluate::Evaluator;
+use parser::Parser;
+use token::{Token, TokenType};
 
 fn tokenize(input: &str) {
     let lines = input.lines();
@@ -59,6 +59,17 @@ fn parse(input: &str) {
     }
 }
 
+fn evaluate(input: &str) {
+    let (tokens, exit_code) = tokenize_lines(input.lines());
+    if exit_code != 0 {
+        exit(exit_code);
+    }
+    let mut parser = Parser::new(&tokens);
+    let exprs = parser.parse();
+    let evaluator = Evaluator::new(&exprs);
+    evaluator.evaluate();
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -76,6 +87,7 @@ fn main() {
     match command.as_str() {
         "tokenize" => tokenize(&file_contents),
         "parse" => parse(&file_contents),
+        "evaluate" => evaluate(&file_contents),
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
             return;
