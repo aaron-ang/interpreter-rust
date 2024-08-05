@@ -65,8 +65,31 @@ pub fn eval(expr: &Expr) -> Value {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l - r),
                     _ => unreachable!(),
                 },
+                TokenType::EQUAL_EQUAL
+                | TokenType::BANG_EQUAL
+                | TokenType::LESS
+                | TokenType::LESS_EQUAL
+                | TokenType::GREATER
+                | TokenType::GREATER_EQUAL => match (left, right) {
+                    (Value::Number(l), Value::Number(r)) => {
+                        Value::Bool(compare_relational(&op.token_type, l, r))
+                    }
+                    _ => unreachable!(),
+                },
                 _ => todo!(),
             }
         }
+    }
+}
+
+fn compare_relational(op: &TokenType, l: f64, r: f64) -> bool {
+    match op {
+        TokenType::EQUAL_EQUAL => l == r,
+        TokenType::BANG_EQUAL => l != r,
+        TokenType::LESS => l < r,
+        TokenType::LESS_EQUAL => l <= r,
+        TokenType::GREATER => l > r,
+        TokenType::GREATER_EQUAL => l >= r,
+        _ => unreachable!(),
     }
 }
