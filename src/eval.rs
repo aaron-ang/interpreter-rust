@@ -56,6 +56,14 @@ pub fn eval(expr: &Expr) -> Value {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l / r),
                     _ => unreachable!(),
                 },
+                TokenType::PLUS => match (left, right) {
+                    (Value::Number(l), Value::Number(r)) => Value::Number(l + r),
+                    _ => unreachable!(),
+                },
+                TokenType::MINUS => match (left, right) {
+                    (Value::Number(l), Value::Number(r)) => Value::Number(l - r),
+                    _ => unreachable!(),
+                },
                 _ => todo!(),
             }
         }
