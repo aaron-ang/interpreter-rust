@@ -65,24 +65,40 @@ pub fn eval(expr: &Expr) -> Value {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l - r),
                     _ => unreachable!(),
                 },
-                TokenType::EQUAL_EQUAL
-                | TokenType::BANG_EQUAL
-                | TokenType::LESS
+                TokenType::LESS
                 | TokenType::LESS_EQUAL
                 | TokenType::GREATER
                 | TokenType::GREATER_EQUAL => match (left, right) {
                     (Value::Number(l), Value::Number(r)) => {
-                        Value::Bool(compare_relational(&op.token_type, l, r))
+                        Value::Bool(compare_number(&op.token_type, l, r))
                     }
                     _ => unreachable!(),
                 },
+                TokenType::EQUAL_EQUAL | TokenType::BANG_EQUAL => {
+                    if !variant_eq(&left, &right) {
+                        return Value::Bool(false);
+                    }
+                    match (left, right) {
+                        (Value::Number(l), Value::Number(r)) => {
+                            Value::Bool(compare_number(&op.token_type, l, r))
+                        }
+                        (Value::String(l), Value::String(r)) => {
+                            Value::Bool(compare_string(&op.token_type, l, r))
+                        }
+                        _ => unreachable!(),
+                    }
+                }
                 _ => todo!(),
             }
         }
     }
 }
 
-fn compare_relational(op: &TokenType, l: f64, r: f64) -> bool {
+fn variant_eq<T>(a: &T, b: &T) -> bool {
+    std::mem::discriminant(a) == std::mem::discriminant(b)
+}
+
+fn compare_number(op: &TokenType, l: f64, r: f64) -> bool {
     match op {
         TokenType::EQUAL_EQUAL => l == r,
         TokenType::BANG_EQUAL => l != r,
@@ -90,6 +106,14 @@ fn compare_relational(op: &TokenType, l: f64, r: f64) -> bool {
         TokenType::LESS_EQUAL => l <= r,
         TokenType::GREATER => l > r,
         TokenType::GREATER_EQUAL => l >= r,
+        _ => unreachable!(),
+    }
+}
+
+fn compare_string(op: &TokenType, l: String, r: String) -> bool {
+    match op {
+        TokenType::EQUAL_EQUAL => l == r,
+        TokenType::BANG_EQUAL => l != r,
         _ => unreachable!(),
     }
 }
