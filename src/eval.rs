@@ -14,11 +14,16 @@ impl Display for Value {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Value::Bool(b) => write!(f, "{}", b),
-            Value::Number(n) => write!(f, "{}", n),
+            Value::Number(n) => write!(f, "{}", remove_trailing_zeros(n)),
             Value::String(s) => write!(f, "{}", s),
             Value::Nil => write!(f, "nil"),
         }
     }
+}
+
+fn remove_trailing_zeros(n: &f64) -> String {
+    let y = (n * 100_000_000.0).round() / 100_000_000.0;
+    format!("{}", y)
 }
 
 pub fn eval(expr: &Expr) -> Result<Value, &'static str> {
@@ -50,11 +55,11 @@ pub fn eval(expr: &Expr) -> Result<Value, &'static str> {
             match op.token_type {
                 TokenType::STAR => match (left, right) {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l * r),
-                    _ => unreachable!(),
+                    _ => return Err("Operands must be numbers."),
                 },
                 TokenType::SLASH => match (left, right) {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l / r),
-                    _ => unreachable!(),
+                    _ => return Err("Operands must be numbers."),
                 },
                 TokenType::PLUS => match (left, right) {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l + r),
