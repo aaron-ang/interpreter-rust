@@ -4,12 +4,12 @@ use std::io::{self, Write};
 use std::process::exit;
 use std::str::Lines;
 
-mod evaluate;
+mod eval;
 mod expr;
 mod parser;
 mod token;
 
-use evaluate::Evaluator;
+use eval::eval;
 use parser::Parser;
 use token::{Token, TokenType};
 
@@ -66,8 +66,9 @@ fn evaluate(input: &str) {
     }
     let mut parser = Parser::new(&tokens);
     let exprs = parser.parse();
-    let evaluator = Evaluator::new(&exprs);
-    evaluator.evaluate();
+    for expr in exprs {
+        println!("{}", eval(expr));
+    }
 }
 
 fn main() {
