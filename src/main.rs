@@ -66,7 +66,7 @@ fn evaluate(input: &str) {
     }
     let mut parser = Parser::new(&tokens);
     let exprs = parser.parse();
-    let evaluator = Evaluator::new(&exprs, &tokens);
+    let evaluator = Evaluator::new(&exprs);
     evaluator.evaluate();
 }
 

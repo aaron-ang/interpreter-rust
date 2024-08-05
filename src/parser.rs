@@ -51,7 +51,7 @@ impl<'a> Parser<'a> {
                 if self.exprs.is_empty() {
                     expr_error(token)
                 }
-                Expr::Group(self.exprs.drain(..).collect())
+                Expr::Group(Box::new(self.exprs.pop().unwrap()))
             }
             TokenType::RIGHT_PAREN => {
                 // right parenthesis was reached before the end of the expression

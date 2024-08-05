@@ -7,7 +7,7 @@ pub enum Expr {
     Bool(bool),
     Number(String),
     String(String),
-    Group(Vec<Expr>),
+    Group(Box<Expr>),
     Unary(Token, Box<Expr>),
     Binary(Token, Box<Expr>, Box<Expr>),
     Nil,
@@ -20,14 +20,7 @@ impl Display for Expr {
             Expr::Number(n) => write!(f, "{n}"),
             Expr::String(s) => write!(f, "{s}"),
             Expr::Group(g) => {
-                write!(
-                    f,
-                    "(group {})",
-                    g.iter()
-                        .map(|e| format!("{e}"))
-                        .collect::<Vec<String>>()
-                        .join(" ")
-                )
+                write!(f, "(group {g})")
             }
             Expr::Unary(op, expr) => {
                 write!(f, "({} {})", op.lexeme, expr)
