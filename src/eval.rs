@@ -77,7 +77,7 @@ pub fn eval(expr: &Expr) -> Result<Value, &'static str> {
                     (Value::Number(l), Value::Number(r)) => {
                         Value::Bool(compare_number(&op.token_type, l, r))
                     }
-                    _ => unreachable!(),
+                    _ => return Err("Operands must be numbers."),
                 },
                 TokenType::EQUAL_EQUAL | TokenType::BANG_EQUAL => {
                     if !variant_eq(&left, &right) {
@@ -122,5 +122,16 @@ fn compare_string(op: &TokenType, l: String, r: String) -> bool {
         TokenType::EQUAL_EQUAL => l == r,
         TokenType::BANG_EQUAL => l != r,
         _ => unreachable!(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trailing_zeros() {
+        assert_eq!(remove_trailing_zeros(&12.40), "12.4");
+        assert_eq!(remove_trailing_zeros(&0.0), "0");
     }
 }
