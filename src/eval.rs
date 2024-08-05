@@ -58,6 +58,7 @@ pub fn eval(expr: &Expr) -> Value {
                 },
                 TokenType::PLUS => match (left, right) {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l + r),
+                    (Value::String(l), Value::String(r)) => Value::String(format!("{}{}", l, r)),
                     _ => unreachable!(),
                 },
                 TokenType::MINUS => match (left, right) {
