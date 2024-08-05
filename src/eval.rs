@@ -44,6 +44,20 @@ pub fn eval(expr: &Expr) -> Value {
                 _ => unreachable!(),
             }
         }
-        Expr::Binary(op, left, right) => todo!(),
+        Expr::Binary(op, left, right) => {
+            let left = eval(left);
+            let right = eval(right);
+            match op.token_type {
+                TokenType::STAR => match (left, right) {
+                    (Value::Number(l), Value::Number(r)) => Value::Number(l * r),
+                    _ => unreachable!(),
+                },
+                TokenType::SLASH => match (left, right) {
+                    (Value::Number(l), Value::Number(r)) => Value::Number(l / r),
+                    _ => unreachable!(),
+                },
+                _ => todo!(),
+            }
+        }
     }
 }
