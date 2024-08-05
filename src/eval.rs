@@ -64,11 +64,11 @@ pub fn eval(expr: &Expr) -> Result<Value, &'static str> {
                 TokenType::PLUS => match (left, right) {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l + r),
                     (Value::String(l), Value::String(r)) => Value::String(format!("{}{}", l, r)),
-                    _ => unreachable!(),
+                    _ => return Err("Operands must be two numbers or two strings."),
                 },
                 TokenType::MINUS => match (left, right) {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l - r),
-                    _ => unreachable!(),
+                    _ => return Err("Operands must be numbers."),
                 },
                 TokenType::LESS
                 | TokenType::LESS_EQUAL
