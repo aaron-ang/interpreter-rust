@@ -21,15 +21,15 @@ impl Display for Value {
     }
 }
 
-pub fn eval(expr: &Expr) -> Value {
-    match expr {
+pub fn eval(expr: &Expr) -> Result<Value, &'static str> {
+    let value = match expr {
         Expr::Nil => Value::Nil,
         Expr::Bool(b) => Value::Bool(*b),
         Expr::Number(n) => Value::Number(n.parse().unwrap()),
         Expr::String(s) => Value::String(s.to_string()),
-        Expr::Group(expr) => eval(expr),
+        Expr::Group(expr) => eval(expr)?,
         Expr::Unary(op, expr) => {
-            let value = eval(expr);
+            let value = eval(expr)?;
             match op.token_type {
                 TokenType::BANG => match value {
                     Value::Bool(b) => Value::Bool(!b),
@@ -39,14 +39,14 @@ pub fn eval(expr: &Expr) -> Value {
                 },
                 TokenType::MINUS => match value {
                     Value::Number(n) => Value::Number(-n),
-                    _ => unreachable!(),
+                    _ => return Err("Operand must be a number."),
                 },
                 _ => unreachable!(),
             }
         }
         Expr::Binary(op, left, right) => {
-            let left = eval(left);
-            let right = eval(right);
+            let left = eval(left)?;
+            let right = eval(right)?;
             match op.token_type {
                 TokenType::STAR => match (left, right) {
                     (Value::Number(l), Value::Number(r)) => Value::Number(l * r),
@@ -76,22 +76,24 @@ pub fn eval(expr: &Expr) -> Value {
                 },
                 TokenType::EQUAL_EQUAL | TokenType::BANG_EQUAL => {
                     if !variant_eq(&left, &right) {
-                        return Value::Bool(false);
-                    }
-                    match (left, right) {
-                        (Value::Number(l), Value::Number(r)) => {
-                            Value::Bool(compare_number(&op.token_type, l, r))
+                        Value::Bool(false)
+                    } else {
+                        match (left, right) {
+                            (Value::Number(l), Value::Number(r)) => {
+                                Value::Bool(compare_number(&op.token_type, l, r))
+                            }
+                            (Value::String(l), Value::String(r)) => {
+                                Value::Bool(compare_string(&op.token_type, l, r))
+                            }
+                            _ => unreachable!(),
                         }
-                        (Value::String(l), Value::String(r)) => {
-                            Value::Bool(compare_string(&op.token_type, l, r))
-                        }
-                        _ => unreachable!(),
                     }
                 }
                 _ => todo!(),
             }
         }
-    }
+    };
+    Ok(value)
 }
 
 fn variant_eq<T>(a: &T, b: &T) -> bool {

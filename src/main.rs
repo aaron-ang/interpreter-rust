@@ -67,7 +67,13 @@ fn evaluate(input: &str) {
     let mut parser = Parser::new(&tokens);
     let exprs = parser.parse();
     for expr in exprs {
-        println!("{}", eval(expr));
+        match eval(expr) {
+            Ok(value) => println!("{}", value),
+            Err(msg) => {
+                eprintln!("{}", msg);
+                exit(70);
+            }
+        }
     }
 }
 
