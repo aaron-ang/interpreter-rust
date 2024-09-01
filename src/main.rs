@@ -10,18 +10,9 @@ mod parser;
 mod token;
 
 use eval::eval;
+use expr::Expr;
 use parser::Parser;
 use token::{Token, TokenType};
-
-fn tokenize(input: &str) {
-    let lines = input.lines();
-    let (tokens, exit_code) = tokenize_lines(lines);
-    for token in tokens {
-        println!("{}", token);
-    }
-    println!("EOF  null");
-    exit(exit_code);
-}
 
 fn tokenize_lines(lines: Lines) -> (Vec<Token>, i32) {
     let mut exit_code = 0;
@@ -45,6 +36,16 @@ fn tokenize_lines(lines: Lines) -> (Vec<Token>, i32) {
         }
     }
     return (tokens, exit_code);
+}
+
+fn tokenize(input: &str) {
+    let lines = input.lines();
+    let (tokens, exit_code) = tokenize_lines(lines);
+    for token in tokens {
+        println!("{}", token);
+    }
+    println!("EOF  null");
+    exit(exit_code);
 }
 
 fn parse(input: &str) {
@@ -77,6 +78,28 @@ fn evaluate(input: &str) {
     }
 }
 
+fn run(input: &str) {
+    let (tokens, exit_code) = tokenize_lines(input.lines());
+    if exit_code != 0 {
+        exit(exit_code);
+    }
+    let mut parser = Parser::new(&tokens);
+    let exprs = parser.parse();
+    for expr in exprs {
+        match eval(expr) {
+            Ok(value) => {
+                if matches!(expr, Expr::Print(_)) {
+                    println!("{}", value)
+                }
+            }
+            Err(msg) => {
+                eprintln!("{}", msg);
+                exit(70)
+            }
+        }
+    }
+}
+
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
@@ -95,6 +118,7 @@ fn main() {
         "tokenize" => tokenize(&file_contents),
         "parse" => parse(&file_contents),
         "evaluate" => evaluate(&file_contents),
+        "run" => run(&file_contents),
         _ => {
             writeln!(io::stderr(), "Unknown command: {}", command).unwrap();
             return;

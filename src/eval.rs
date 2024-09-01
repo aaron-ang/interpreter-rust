@@ -97,6 +97,7 @@ pub fn eval(expr: &Expr) -> Result<Value, &'static str> {
                 _ => todo!(),
             }
         }
+        Expr::Print(expr) => eval(expr)?,
     };
     Ok(value)
 }

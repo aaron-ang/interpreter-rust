@@ -11,6 +11,7 @@ pub enum Expr {
     Unary(Token, Box<Expr>),
     Binary(Token, Box<Expr>, Box<Expr>),
     Nil,
+    Print(Box<Expr>),
 }
 
 impl Display for Expr {
@@ -29,6 +30,7 @@ impl Display for Expr {
                 write!(f, "({} {} {})", op.lexeme, left, right)
             }
             Expr::Nil => write!(f, "nil"),
+            Expr::Print(expr) => write!(f, "(print {expr})"),
         }
     }
 }
