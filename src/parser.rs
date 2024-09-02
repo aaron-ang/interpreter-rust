@@ -48,10 +48,21 @@ impl<'a> Parser<'a> {
     }
 
     pub fn expression(&mut self) -> Result<Expression, String> {
-        self.binary_operation(
+        let expression = self.binary_operation(
             &[TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL],
             Self::comparison,
-        )
+        )?;
+        if self.match_(&[TokenType::EQUAL]) {
+            let right = self.expression()?;
+            if let Expression::Variable(name) = expression {
+                return Ok(Expression::Assign {
+                    name,
+                    right: Box::new(right),
+                });
+            }
+            return Err(self.error(self.previous(), "Invalid assignment target."));
+        }
+        Ok(expression)
     }
 
     fn comparison(&mut self) -> Result<Expression, String> {

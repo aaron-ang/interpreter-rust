@@ -98,6 +98,11 @@ impl Interpreter {
                 }
             }
             Expression::Variable(var) => self.get_variable(var)?,
+            Expression::Assign { name, right } => {
+                let value = self.evaluate(right)?;
+                self.reassign_variable(name, &value)?;
+                value
+            }
         };
         Ok(literal)
     }
@@ -110,6 +115,17 @@ impl Interpreter {
                 let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line_num);
                 Err(Box::leak(msg.into_boxed_str()))
             }
+        }
+    }
+
+    fn reassign_variable(&mut self, var: &Token, value: &Literal) -> Result<(), &'static str> {
+        let lexeme = &var.lexeme;
+        if self.environment.contains_key(lexeme.as_str()) {
+            self.environment.insert(lexeme.clone(), value.clone());
+            Ok(())
+        } else {
+            let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line_num);
+            Err(Box::leak(msg.into_boxed_str()))
         }
     }
 }
