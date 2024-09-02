@@ -18,7 +18,9 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Statement, String> {
-        if self.match_(&[TokenType::PRINT]) {
+        if self.match_(&[TokenType::VAR]) {
+            return self.variable();
+        } else if self.match_(&[TokenType::PRINT]) {
             let expression = self.expression()?;
             self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
             Ok(Statement::Print(expression))
@@ -27,6 +29,22 @@ impl<'a> Parser<'a> {
             self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.")?;
             Ok(Statement::Expression(expression))
         }
+    }
+
+    fn variable(&mut self) -> Result<Statement, String> {
+        let name = self
+            .consume(&TokenType::IDENTIFIER, "Expect variable name.")?
+            .clone();
+        let init = if self.match_(&[TokenType::EQUAL]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume(
+            &TokenType::SEMICOLON,
+            "Expect ';' after variable declaration.",
+        )?;
+        Ok(Statement::Variable { name, init })
     }
 
     pub fn expression(&mut self) -> Result<Expression, String> {
@@ -103,6 +121,10 @@ impl<'a> Parser<'a> {
             return Ok(Expression::Literal(
                 self.previous().literal.as_ref().unwrap().clone(),
             ));
+        }
+
+        if self.match_(&[TokenType::IDENTIFIER]) {
+            return Ok(Expression::Variable(self.previous().clone()));
         }
 
         if self.match_(&[TokenType::LEFT_PAREN]) {

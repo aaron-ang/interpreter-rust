@@ -145,6 +145,7 @@ pub enum Expression {
         left: Box<Expression>,
         right: Box<Expression>,
     },
+    Variable(Token),
 }
 
 impl Display for Expression {
@@ -160,6 +161,7 @@ impl Display for Expression {
             Expression::Binary { op, left, right } => {
                 write!(f, "({} {} {})", op.lexeme, left, right)
             }
+            Expression::Variable(name) => write!(f, "(var {})", name.lexeme),
         }
     }
 }
@@ -168,4 +170,8 @@ impl Display for Expression {
 pub enum Statement {
     Expression(Expression),
     Print(Expression),
+    Variable {
+        name: Token,
+        init: Option<Expression>,
+    },
 }

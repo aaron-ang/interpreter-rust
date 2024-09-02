@@ -29,6 +29,13 @@ impl Interpreter {
             Statement::Expression(expr) => {
                 self.evaluate(&expr)?;
             }
+            Statement::Variable { name, init } => {
+                let value = match init {
+                    Some(expr) => self.evaluate(&expr)?,
+                    None => Literal::Nil,
+                };
+                self.environment.insert(name.lexeme, value);
+            }
         }
         Ok(())
     }
@@ -90,8 +97,19 @@ impl Interpreter {
                     _ => todo!(),
                 }
             }
+            Expression::Variable(var) => self.get_variable(&var.lexeme)?,
         };
         Ok(literal)
+    }
+
+    fn get_variable(&self, name: &str) -> Result<Literal, &'static str> {
+        match self.environment.get(name) {
+            Some(value) => Ok(value.clone()),
+            None => {
+                let msg = format!("Undefined variable '{}'.", name);
+                Err(Box::leak(msg.into_boxed_str()))
+            }
+        }
     }
 }
 
