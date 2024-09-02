@@ -6,7 +6,7 @@ use crate::token::Token;
 pub enum Literal {
     Boolean(bool),
     String(String),
-    Number(String),
+    Number(f64),
     Nil,
 }
 
@@ -14,7 +14,15 @@ impl Display for Literal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Literal::Boolean(b) => write!(f, "{b}"),
-            Literal::String(s) | Literal::Number(s) => write!(f, "{s}"),
+            Literal::String(s) => write!(f, "{s}"),
+            Literal::Number(n) => {
+                let int = n.trunc();
+                if int == *n {
+                    write!(f, "{int}.0")
+                } else {
+                    write!(f, "{n}")
+                }
+            }
             Literal::Nil => write!(f, "nil"),
         }
     }

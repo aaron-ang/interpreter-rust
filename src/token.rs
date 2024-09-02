@@ -1,5 +1,7 @@
 use std::fmt::Display;
 
+use crate::grammar::Literal;
+
 #[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
@@ -77,7 +79,7 @@ pub fn get_token_type(identifier: &str) -> TokenType {
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
-    pub literal: Option<String>,
+    pub literal: Option<Literal>,
     pub line_num: usize,
 }
 
@@ -85,7 +87,7 @@ impl Token {
     pub fn new(
         token_type: TokenType,
         lexeme: String,
-        literal: Option<String>,
+        literal: Option<Literal>,
         line_num: usize,
     ) -> Token {
         Token {
@@ -101,7 +103,7 @@ impl Token {
         chars: &mut std::iter::Peekable<std::str::Chars>,
         line_num: usize,
     ) -> Option<Token> {
-        let (token_type, lexeme, literal): (TokenType, String, Option<String>) = match c {
+        let (token_type, lexeme, literal): (TokenType, String, Option<Literal>) = match c {
             '(' => (TokenType::LEFT_PAREN, c.to_string(), None),
             ')' => (TokenType::RIGHT_PAREN, c.to_string(), None),
             '{' => (TokenType::LEFT_BRACE, c.to_string(), None),
@@ -146,7 +148,7 @@ impl Token {
                 }
                 // remove quotes
                 let literal = lexeme[1..lexeme.len() - 1].to_string();
-                (TokenType::STRING, lexeme, Some(literal))
+                (TokenType::STRING, lexeme, Some(Literal::String(literal)))
             }
             c if c.is_ascii_digit() => {
                 let mut lexeme = String::from(c);
@@ -181,7 +183,11 @@ impl Token {
                         }
                     }
                 }
-                (TokenType::NUMBER, lexeme, Some(literal))
+                (
+                    TokenType::NUMBER,
+                    lexeme,
+                    Some(Literal::Number(literal.parse().unwrap())),
+                )
             }
             c if c.is_alphabetic() || c == '_' => {
                 let mut identifier = String::from(c);
@@ -208,12 +214,9 @@ impl Token {
 
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{:?} {} {}",
-            self.token_type,
-            self.lexeme,
-            self.literal.as_ref().unwrap_or(&"null".to_string())
-        )
+        match &self.literal {
+            Some(value) => write!(f, "{:?} {} {value}", self.token_type, self.lexeme),
+            None => write!(f, "{:?} {} null", self.token_type, self.lexeme),
+        }
     }
 }
