@@ -97,16 +97,17 @@ impl Interpreter {
                     _ => todo!(),
                 }
             }
-            Expression::Variable(var) => self.get_variable(&var.lexeme)?,
+            Expression::Variable(var) => self.get_variable(var)?,
         };
         Ok(literal)
     }
 
-    fn get_variable(&self, name: &str) -> Result<Literal, &'static str> {
-        match self.environment.get(name) {
+    fn get_variable(&self, var: &Token) -> Result<Literal, &'static str> {
+        let lexeme = &var.lexeme;
+        match self.environment.get(lexeme.as_str()) {
             Some(value) => Ok(value.clone()),
             None => {
-                let msg = format!("Undefined variable '{}'.", name);
+                let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line_num);
                 Err(Box::leak(msg.into_boxed_str()))
             }
         }
