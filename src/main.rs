@@ -2,56 +2,33 @@ use std::env;
 use std::fs;
 use std::io::{self, Write};
 use std::process::exit;
-use std::str::Lines;
 
 mod grammar;
-mod interpret;
+mod interpreter;
 mod parser;
-mod token;
+mod scanner;
 
-use grammar::Literal;
-use interpret::Interpreter;
+use grammar::*;
+use interpreter::Interpreter;
 use parser::Parser;
-use token::{Token, TokenType};
-
-fn tokenize_lines(lines: Lines) -> (Vec<Token>, i32) {
-    let mut exit_code = 0;
-    let mut tokens = vec![];
-    let mut line_num = 1;
-    for line in lines {
-        let mut chars = line.chars().peekable();
-        while let Some(char) = chars.next() {
-            if char == ' ' || char == '\t' {
-                continue;
-            }
-            if let Some(token) = Token::get_token(char, &mut chars, line_num) {
-                if token.token_type == TokenType::COMMENT {
-                    break; // go to next line
-                }
-                tokens.push(token);
-            } else {
-                exit_code = 65;
-            }
-        }
-        line_num += 1;
-    }
-    tokens.push(Token::new(TokenType::EOF, "".into(), None, line_num));
-    return (tokens, exit_code);
-}
+use scanner::Scanner;
 
 fn tokenize(input: &str) {
-    let lines = input.lines();
-    let (tokens, exit_code) = tokenize_lines(lines);
+    let mut scanner = Scanner::new(input);
+    let tokens = scanner.scan_tokens();
     for token in tokens {
         println!("{}", token);
     }
-    exit(exit_code);
+    if scanner.error {
+        exit(65);
+    }
 }
 
 fn parse(input: &str) {
-    let (tokens, exit_code) = tokenize_lines(input.lines());
-    if exit_code != 0 {
-        exit(exit_code);
+    let mut scanner = Scanner::new(input);
+    let tokens = scanner.scan_tokens();
+    if scanner.error {
+        exit(65);
     }
 
     let mut parser = Parser::new(&tokens);
@@ -65,9 +42,10 @@ fn parse(input: &str) {
 }
 
 fn evaluate(input: &str) {
-    let (tokens, exit_code) = tokenize_lines(input.lines());
-    if exit_code != 0 {
-        exit(exit_code);
+    let mut scanner = Scanner::new(input);
+    let tokens = scanner.scan_tokens();
+    if scanner.error {
+        exit(65);
     }
 
     let mut parser = Parser::new(&tokens);
@@ -93,9 +71,10 @@ fn evaluate(input: &str) {
 }
 
 fn run(input: &str) {
-    let (tokens, exit_code) = tokenize_lines(input.lines());
-    if exit_code != 0 {
-        exit(exit_code);
+    let mut scanner = Scanner::new(input);
+    let tokens = scanner.scan_tokens();
+    if scanner.error {
+        exit(65);
     }
 
     let mut parser = Parser::new(&tokens);

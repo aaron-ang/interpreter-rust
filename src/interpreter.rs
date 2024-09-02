@@ -85,31 +85,14 @@ impl Interpreter {
                         }
                         _ => return Err("Operands must be numbers."),
                     },
-                    TokenType::EQUAL_EQUAL | TokenType::BANG_EQUAL => {
-                        if !variant_eq(&left, &right) {
-                            Literal::Boolean(false)
-                        } else {
-                            match (left, right) {
-                                (Literal::Number(l), Literal::Number(r)) => {
-                                    Literal::Boolean(compare_number(&op.token_type, l, r))
-                                }
-                                (Literal::String(l), Literal::String(r)) => {
-                                    Literal::Boolean(compare_string(&op.token_type, l, r))
-                                }
-                                _ => unreachable!(),
-                            }
-                        }
-                    }
+                    TokenType::EQUAL_EQUAL => Literal::Boolean(left == right),
+                    TokenType::BANG_EQUAL => Literal::Boolean(left != right),
                     _ => todo!(),
                 }
             }
         };
         Ok(literal)
     }
-}
-
-fn variant_eq<T>(a: &T, b: &T) -> bool {
-    std::mem::discriminant(a) == std::mem::discriminant(b)
 }
 
 fn compare_number(op: &TokenType, l: f64, r: f64) -> bool {
@@ -120,14 +103,6 @@ fn compare_number(op: &TokenType, l: f64, r: f64) -> bool {
         TokenType::LESS_EQUAL => l <= r,
         TokenType::GREATER => l > r,
         TokenType::GREATER_EQUAL => l >= r,
-        _ => unreachable!(),
-    }
-}
-
-fn compare_string(op: &TokenType, l: String, r: String) -> bool {
-    match op {
-        TokenType::EQUAL_EQUAL => l == r,
-        TokenType::BANG_EQUAL => l != r,
         _ => unreachable!(),
     }
 }

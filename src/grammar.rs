@@ -25,8 +25,6 @@ pub enum TokenType {
     GREATER,
     GREATER_EQUAL,
 
-    COMMENT,
-
     IDENTIFIER,
     STRING,
     NUMBER,
@@ -108,7 +106,7 @@ impl Display for Token {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
     Boolean(bool),
     String(String),
