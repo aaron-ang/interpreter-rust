@@ -120,15 +120,19 @@ impl<'a> Scanner<'a> {
 
     fn handle_number(&mut self) {
         let mut has_dot = false;
-        let mut peekable = self.chars.clone().peekable();
-
-        while let Some(next_char) = peekable.next() {
+        while let Some(&next_char) = self.chars.peek() {
             match next_char {
                 '0'..='9' => {
                     self.current.push(next_char);
                     self.chars.next();
                 }
-                '.' if !has_dot && peekable.peek().is_some_and(|p| p.is_ascii_digit()) => {
+                '.' if !has_dot
+                    && self
+                        .chars
+                        .clone()
+                        .nth(1)
+                        .is_some_and(|p| p.is_ascii_digit()) =>
+                {
                     self.current.push(next_char);
                     has_dot = true;
                     self.chars.next();
@@ -136,24 +140,8 @@ impl<'a> Scanner<'a> {
                 _ => break,
             }
         }
-
-        let mut literal = self.current.clone();
-        if literal.chars().last().is_some_and(|c| c.is_ascii_digit()) {
-            if !has_dot {
-                literal.push('.');
-                literal.push('0');
-            } else {
-                while literal.chars().last() == Some('0')
-                    && literal.chars().nth_back(1) == Some('0')
-                {
-                    literal.pop();
-                }
-            }
-        }
-        self.add_token(
-            TokenType::NUMBER,
-            Some(Literal::Number(literal.parse().unwrap())),
-        )
+        let number: f64 = self.current.parse().unwrap();
+        self.add_token(TokenType::NUMBER, Some(Literal::Number(number)));
     }
 
     fn handle_identifier(&mut self) {
