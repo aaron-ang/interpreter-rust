@@ -1,111 +1,169 @@
-use std::iter::Peekable;
 use std::process::exit;
-use std::slice::Iter;
 
 use crate::{
-    expr::Expr,
+    grammar::{Expression, Literal, Statement},
     token::{Token, TokenType},
 };
 
 pub struct Parser<'a> {
-    tokens: &'a Vec<Token>,
-    exprs: Vec<Expr>,
+    tokens: &'a [Token],
+    current: usize,
 }
 
 impl<'a> Parser<'a> {
-    pub fn new(tokens: &'a Vec<Token>) -> Self {
-        Self {
-            tokens,
-            exprs: vec![],
+    pub fn new(tokens: &'a [Token]) -> Self {
+        Self { tokens, current: 0 }
+    }
+
+    pub fn parse(&mut self) -> Vec<Statement> {
+        let mut statements = vec![];
+        while !self.end() {
+            statements.push(self.statement());
+        }
+        statements
+    }
+
+    fn statement(&mut self) -> Statement {
+        if self.match_(&[TokenType::PRINT]) {
+            let expression = self.expression();
+            self.consume(&TokenType::SEMICOLON, "Expect ';' after value.");
+            Statement::Print(expression)
+        } else {
+            let expression = self.expression();
+            self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.");
+            Statement::Expression(expression)
         }
     }
 
-    pub fn parse(&mut self) -> &Vec<Expr> {
-        let mut tokens = self.tokens.iter().peekable();
-        while let Some(token) = tokens.next() {
-            let expr = self.get_expr(token, &mut tokens);
-            self.exprs.push(expr);
+    pub fn expression(&mut self) -> Expression {
+        self.binary_operation(
+            Self::comparison,
+            &[TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL],
+        )
+    }
+
+    fn comparison(&mut self) -> Expression {
+        self.binary_operation(
+            Self::term,
+            &[
+                TokenType::GREATER,
+                TokenType::GREATER_EQUAL,
+                TokenType::LESS,
+                TokenType::LESS_EQUAL,
+            ],
+        )
+    }
+
+    fn term(&mut self) -> Expression {
+        self.binary_operation(Self::factor, &[TokenType::MINUS, TokenType::PLUS])
+    }
+
+    fn factor(&mut self) -> Expression {
+        self.binary_operation(Self::unary, &[TokenType::SLASH, TokenType::STAR])
+    }
+
+    fn binary_operation(
+        &mut self,
+        next_precedence: fn(&mut Self) -> Expression,
+        operators: &[TokenType],
+    ) -> Expression {
+        let mut expression = next_precedence(self);
+        while self.match_(operators) {
+            let op = self.previous().clone();
+            let right = next_precedence(self);
+            expression = Expression::Binary {
+                op,
+                left: Box::new(expression),
+                right: Box::new(right),
+            };
         }
-        &self.exprs
+        expression
     }
 
-    fn get_expr(&mut self, token: &Token, tokens: &mut Peekable<Iter<Token>>) -> Expr {
-        let expr = match token.token_type {
-            TokenType::TRUE => Expr::Bool(true),
-            TokenType::FALSE => Expr::Bool(false),
-            TokenType::NUMBER => Expr::Number(token.literal.clone().unwrap()),
-            TokenType::STRING => Expr::String(token.literal.clone().unwrap()),
-            TokenType::LEFT_PAREN => {
-                while let Some(token) = tokens.next() {
-                    if token.token_type == TokenType::RIGHT_PAREN {
-                        break;
-                    }
-                    if tokens.peek().is_none() {
-                        eprintln!("Error: Unmatched parentheses.");
-                        exit(65);
-                    }
-                    let expr = self.get_expr(token, tokens);
-                    self.exprs.push(expr);
-                }
-                // no expression was found after the left parenthesis
-                if self.exprs.is_empty() {
-                    Parser::expr_error(token)
-                }
-                Expr::Group(Box::new(self.exprs.pop().unwrap()))
-            }
-            TokenType::RIGHT_PAREN => {
-                // right parenthesis was reached before the end of the expression
-                Parser::expr_error(token)
-            }
-            TokenType::BANG => Expr::Unary(
-                token.clone(),
-                Box::new(self.get_expr(tokens.next().unwrap(), tokens)),
-            ),
-            TokenType::STAR
-            | TokenType::SLASH
-            | TokenType::PLUS
-            | TokenType::LESS
-            | TokenType::GREATER
-            | TokenType::LESS_EQUAL
-            | TokenType::GREATER_EQUAL
-            | TokenType::EQUAL_EQUAL
-            | TokenType::BANG_EQUAL => {
-                if self.exprs.is_empty() {
-                    Parser::expr_error(token)
-                }
-                let left = self.exprs.pop().unwrap();
-                let next_token = tokens.next();
-                if next_token.is_none() {
-                    Parser::expr_error(token)
-                }
-                let right = self.get_expr(next_token.unwrap(), tokens);
-                Expr::Binary(token.clone(), Box::new(left), Box::new(right))
-            }
-            TokenType::MINUS => {
-                let next_token = tokens.next();
-                if next_token.is_none() {
-                    Parser::expr_error(token)
-                }
-                if self.exprs.is_empty() {
-                    Expr::Unary(
-                        token.clone(),
-                        Box::new(self.get_expr(next_token.unwrap(), tokens)),
-                    )
-                } else {
-                    let left = self.exprs.pop().unwrap();
-                    let right = self.get_expr(next_token.unwrap(), tokens);
-                    Expr::Binary(token.clone(), Box::new(left), Box::new(right))
-                }
-            }
-            TokenType::NIL => Expr::Nil,
-            _ => todo!(),
-        };
-        expr
+    pub fn unary(&mut self) -> Expression {
+        if self.match_(&[TokenType::BANG, TokenType::MINUS]) {
+            let op = self.previous().clone();
+            let expr = self.unary();
+            return Expression::Unary {
+                op,
+                expr: Box::new(expr),
+            };
+        }
+        self.primary()
     }
 
-    fn expr_error(token: &Token) -> ! {
+    pub fn primary(&mut self) -> Expression {
+        if self.match_(&[TokenType::FALSE]) {
+            return Expression::Literal(Literal::Boolean(false));
+        }
+
+        if self.match_(&[TokenType::TRUE]) {
+            return Expression::Literal(Literal::Boolean(true));
+        }
+
+        if self.match_(&[TokenType::NIL]) {
+            return Expression::Literal(Literal::Nil);
+        }
+
+        if self.match_(&[TokenType::NUMBER, TokenType::STRING]) {
+            return Expression::Literal(self.previous().literal.as_ref().unwrap().clone());
+        }
+
+        if self.match_(&[TokenType::LEFT_PAREN]) {
+            let expression = self.expression();
+            self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after expression.");
+            return Expression::Group(Box::new(expression));
+        }
+
+        self.error(self.peek(), "Expect expression.")
+    }
+
+    fn match_(&mut self, token_types: &[TokenType]) -> bool {
+        for token_type in token_types {
+            if self.check(token_type) {
+                self.advance();
+                return true;
+            }
+        }
+        false
+    }
+
+    fn consume(&mut self, token_type: &TokenType, message: &str) -> &Token {
+        if self.check(token_type) {
+            return self.advance();
+        }
+        self.error(self.peek(), message)
+    }
+
+    fn check(&self, token_type: &TokenType) -> bool {
+        if self.end() {
+            return false;
+        }
+        self.peek().token_type == *token_type
+    }
+
+    fn advance(&mut self) -> &Token {
+        if !self.end() {
+            self.current += 1;
+        }
+        self.previous()
+    }
+
+    fn end(&self) -> bool {
+        self.peek().token_type == TokenType::EOF
+    }
+
+    fn peek(&self) -> &Token {
+        &self.tokens[self.current]
+    }
+
+    fn previous(&self) -> &Token {
+        &self.tokens[self.current - 1]
+    }
+
+    fn error(&self, token: &Token, message: &str) -> ! {
         eprintln!(
-            "[line {}] Error at '{}': Expect expression.",
+            "[line {}] Error at '{}': {message}",
             token.line_num, token.lexeme
         );
         exit(65);

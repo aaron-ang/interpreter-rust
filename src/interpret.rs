@@ -21,11 +21,12 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn execute(&mut self, statement: Statement) -> Result<(), &'static str> {
+    fn execute(&mut self, statement: Statement) -> Result<(), &'static str> {
         match statement {
-            Statement::Print(expr) => {
-                println!("{}", self.evaluate(&expr)?);
-            }
+            Statement::Print(expr) => match self.evaluate(&expr)? {
+                Literal::Number(n) => println!("{}", n),
+                val => println!("{}", val),
+            },
             Statement::Expression(expr) => {
                 self.evaluate(&expr)?;
             }
@@ -34,13 +35,8 @@ impl Interpreter {
     }
 
     pub fn evaluate(&mut self, expr: &Expression) -> Result<Literal, &'static str> {
-        let value = match expr {
-            Expression::Literal(l) => match l {
-                Literal::Boolean(b) => Literal::Boolean(*b),
-                Literal::String(s) => Literal::String(s.to_string()),
-                Literal::Number(n) => Literal::Number(*n),
-                Literal::Nil => Literal::Nil,
-            },
+        let literal = match expr {
+            Expression::Literal(l) => l.clone(),
             Expression::Group(expr) => self.evaluate(expr)?,
             Expression::Unary { op, expr } => {
                 let literal = self.evaluate(expr)?;
@@ -109,7 +105,7 @@ impl Interpreter {
                 }
             }
         };
-        Ok(value)
+        Ok(literal)
     }
 }
 

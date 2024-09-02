@@ -4,23 +4,22 @@ use std::io::{self, Write};
 use std::process::exit;
 use std::str::Lines;
 
-mod eval;
-mod expr;
+mod grammar;
+mod interpret;
 mod parser;
 mod token;
 
-use eval::eval;
-use expr::Expr;
+use grammar::Literal;
+use interpret::Interpreter;
 use parser::Parser;
 use token::{Token, TokenType};
 
 fn tokenize_lines(lines: Lines) -> (Vec<Token>, i32) {
     let mut exit_code = 0;
     let mut tokens = vec![];
-    for (i, line) in lines.enumerate() {
-        let line_num = i + 1;
+    let mut line_num = 1;
+    for line in lines {
         let mut chars = line.chars().peekable();
-
         while let Some(char) = chars.next() {
             if char == ' ' || char == '\t' {
                 continue;
@@ -34,7 +33,9 @@ fn tokenize_lines(lines: Lines) -> (Vec<Token>, i32) {
                 exit_code = 65;
             }
         }
+        line_num += 1;
     }
+    tokens.push(Token::new(TokenType::EOF, "".into(), None, line_num));
     return (tokens, exit_code);
 }
 
@@ -44,7 +45,6 @@ fn tokenize(input: &str) {
     for token in tokens {
         println!("{}", token);
     }
-    println!("EOF  null");
     exit(exit_code);
 }
 
@@ -53,11 +53,9 @@ fn parse(input: &str) {
     if exit_code != 0 {
         exit(exit_code);
     }
+
     let mut parser = Parser::new(&tokens);
-    let exprs = parser.parse();
-    for expr in exprs {
-        println!("{}", expr);
-    }
+    println!("{}", parser.expression());
 }
 
 fn evaluate(input: &str) {
@@ -65,15 +63,19 @@ fn evaluate(input: &str) {
     if exit_code != 0 {
         exit(exit_code);
     }
+
     let mut parser = Parser::new(&tokens);
-    let exprs = parser.parse();
-    for expr in exprs {
-        match eval(expr) {
-            Ok(value) => println!("{}", value),
-            Err(msg) => {
-                eprintln!("{}", msg);
-                exit(70);
-            }
+    let expr = parser.expression();
+
+    let mut interpreter = Interpreter::new();
+    match interpreter.evaluate(&expr) {
+        Ok(val) => match val {
+            Literal::Number(n) => println!("{}", n),
+            _ => println!("{}", val),
+        },
+        Err(msg) => {
+            eprintln!("{}", msg);
+            exit(70);
         }
     }
 }
@@ -84,18 +86,13 @@ fn run(input: &str) {
         exit(exit_code);
     }
     let mut parser = Parser::new(&tokens);
-    let exprs = parser.parse();
-    for expr in exprs {
-        match eval(expr) {
-            Ok(value) => {
-                if matches!(expr, Expr::Print(_)) {
-                    println!("{}", value)
-                }
-            }
-            Err(msg) => {
-                eprintln!("{}", msg);
-                exit(70)
-            }
+    let statements = parser.parse();
+    let mut interpreter = Interpreter::new();
+    match interpreter.interpret(statements) {
+        Ok(_) => {}
+        Err(msg) => {
+            eprintln!("{}", msg);
+            exit(70);
         }
     }
 }
