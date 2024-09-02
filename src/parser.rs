@@ -1,8 +1,4 @@
-use crate::{
-    grammar::{Expression, Literal, Statement},
-    token::{Token, TokenType},
-};
-
+use crate::grammar::*;
 pub struct Parser<'a> {
     tokens: &'a [Token],
     current: usize,
@@ -10,7 +6,7 @@ pub struct Parser<'a> {
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
-        Self { tokens, current: 0 }
+        Parser { tokens, current: 0 }
     }
 
     pub fn parse(&mut self) -> Result<Vec<Statement>, String> {
@@ -35,47 +31,47 @@ impl<'a> Parser<'a> {
 
     pub fn expression(&mut self) -> Result<Expression, String> {
         self.binary_operation(
-            Self::comparison,
             &[TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL],
+            Self::comparison,
         )
     }
 
     fn comparison(&mut self) -> Result<Expression, String> {
         self.binary_operation(
-            Self::term,
             &[
                 TokenType::GREATER,
                 TokenType::GREATER_EQUAL,
                 TokenType::LESS,
                 TokenType::LESS_EQUAL,
             ],
+            Self::term,
         )
     }
 
     fn term(&mut self) -> Result<Expression, String> {
-        self.binary_operation(Self::factor, &[TokenType::MINUS, TokenType::PLUS])
+        self.binary_operation(&[TokenType::MINUS, TokenType::PLUS], Self::factor)
     }
 
     fn factor(&mut self) -> Result<Expression, String> {
-        self.binary_operation(Self::unary, &[TokenType::SLASH, TokenType::STAR])
+        self.binary_operation(&[TokenType::SLASH, TokenType::STAR], Self::unary)
     }
 
     fn binary_operation(
         &mut self,
-        next_precedence: fn(&mut Self) -> Result<Expression, String>,
         operators: &[TokenType],
+        next_precedence: fn(&mut Self) -> Result<Expression, String>,
     ) -> Result<Expression, String> {
-        let mut expression = next_precedence(self)?;
+        let mut left = next_precedence(self)?;
         while self.match_(operators) {
             let op = self.previous().clone();
             let right = next_precedence(self)?;
-            expression = Expression::Binary {
+            left = Expression::Binary {
                 op,
-                left: Box::new(expression),
+                left: Box::new(left),
                 right: Box::new(right),
             };
         }
-        Ok(expression)
+        Ok(left)
     }
 
     pub fn unary(&mut self) -> Result<Expression, String> {
@@ -120,7 +116,7 @@ impl<'a> Parser<'a> {
 
     fn match_(&mut self, token_types: &[TokenType]) -> bool {
         for token_type in token_types {
-            if self.check(token_type) {
+            if self.is_cur_match(token_type) {
                 self.advance();
                 return true;
             }
@@ -129,13 +125,13 @@ impl<'a> Parser<'a> {
     }
 
     fn consume(&mut self, token_type: &TokenType, message: &str) -> Result<&Token, String> {
-        if self.check(token_type) {
+        if self.is_cur_match(token_type) {
             return Ok(self.advance());
         }
         Err(self.error(self.peek(), message))
     }
 
-    fn check(&self, token_type: &TokenType) -> bool {
+    fn is_cur_match(&self, token_type: &TokenType) -> bool {
         !self.end() && self.peek().token_type == *token_type
     }
 

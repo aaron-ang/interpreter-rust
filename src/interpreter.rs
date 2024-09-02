@@ -1,7 +1,6 @@
 use std::collections::HashMap;
 
-use crate::grammar::{Expression, Literal, Statement};
-use crate::token::TokenType;
+use crate::grammar::*;
 
 pub struct Interpreter {
     environment: HashMap<String, Literal>,
@@ -9,7 +8,7 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        Self {
+        Interpreter {
             environment: HashMap::new(),
         }
     }
