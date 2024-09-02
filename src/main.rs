@@ -55,7 +55,13 @@ fn parse(input: &str) {
     }
 
     let mut parser = Parser::new(&tokens);
-    println!("{}", parser.expression());
+    match parser.expression() {
+        Ok(expression) => println!("{expression}"),
+        Err(msg) => {
+            eprintln!("{}", msg);
+            exit(65);
+        }
+    }
 }
 
 fn evaluate(input: &str) {
@@ -65,7 +71,13 @@ fn evaluate(input: &str) {
     }
 
     let mut parser = Parser::new(&tokens);
-    let expr = parser.expression();
+    let expr = match parser.expression() {
+        Ok(expr) => expr,
+        Err(msg) => {
+            eprintln!("{}", msg);
+            exit(65);
+        }
+    };
 
     let mut interpreter = Interpreter::new();
     match interpreter.evaluate(&expr) {
@@ -85,8 +97,16 @@ fn run(input: &str) {
     if exit_code != 0 {
         exit(exit_code);
     }
+
     let mut parser = Parser::new(&tokens);
-    let statements = parser.parse();
+    let statements = match parser.parse() {
+        Ok(statements) => statements,
+        Err(msg) => {
+            eprintln!("{}", msg);
+            exit(65);
+        }
+    };
+
     let mut interpreter = Interpreter::new();
     match interpreter.interpret(statements) {
         Ok(_) => {}

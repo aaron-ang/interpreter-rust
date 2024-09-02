@@ -1,5 +1,3 @@
-use std::process::exit;
-
 use crate::{
     grammar::{Expression, Literal, Statement},
     token::{Token, TokenType},
@@ -15,34 +13,34 @@ impl<'a> Parser<'a> {
         Self { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Vec<Statement> {
+    pub fn parse(&mut self) -> Result<Vec<Statement>, String> {
         let mut statements = vec![];
         while !self.end() {
-            statements.push(self.statement());
+            statements.push(self.statement()?);
         }
-        statements
+        Ok(statements)
     }
 
-    fn statement(&mut self) -> Statement {
+    fn statement(&mut self) -> Result<Statement, String> {
         if self.match_(&[TokenType::PRINT]) {
-            let expression = self.expression();
-            self.consume(&TokenType::SEMICOLON, "Expect ';' after value.");
-            Statement::Print(expression)
+            let expression = self.expression()?;
+            self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
+            Ok(Statement::Print(expression))
         } else {
-            let expression = self.expression();
-            self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.");
-            Statement::Expression(expression)
+            let expression = self.expression()?;
+            self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.")?;
+            Ok(Statement::Expression(expression))
         }
     }
 
-    pub fn expression(&mut self) -> Expression {
+    pub fn expression(&mut self) -> Result<Expression, String> {
         self.binary_operation(
             Self::comparison,
             &[TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL],
         )
     }
 
-    fn comparison(&mut self) -> Expression {
+    fn comparison(&mut self) -> Result<Expression, String> {
         self.binary_operation(
             Self::term,
             &[
@@ -54,68 +52,70 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn term(&mut self) -> Expression {
+    fn term(&mut self) -> Result<Expression, String> {
         self.binary_operation(Self::factor, &[TokenType::MINUS, TokenType::PLUS])
     }
 
-    fn factor(&mut self) -> Expression {
+    fn factor(&mut self) -> Result<Expression, String> {
         self.binary_operation(Self::unary, &[TokenType::SLASH, TokenType::STAR])
     }
 
     fn binary_operation(
         &mut self,
-        next_precedence: fn(&mut Self) -> Expression,
+        next_precedence: fn(&mut Self) -> Result<Expression, String>,
         operators: &[TokenType],
-    ) -> Expression {
-        let mut expression = next_precedence(self);
+    ) -> Result<Expression, String> {
+        let mut expression = next_precedence(self)?;
         while self.match_(operators) {
             let op = self.previous().clone();
-            let right = next_precedence(self);
+            let right = next_precedence(self)?;
             expression = Expression::Binary {
                 op,
                 left: Box::new(expression),
                 right: Box::new(right),
             };
         }
-        expression
+        Ok(expression)
     }
 
-    pub fn unary(&mut self) -> Expression {
+    pub fn unary(&mut self) -> Result<Expression, String> {
         if self.match_(&[TokenType::BANG, TokenType::MINUS]) {
             let op = self.previous().clone();
-            let expr = self.unary();
-            return Expression::Unary {
+            let expr = self.unary()?;
+            return Ok(Expression::Unary {
                 op,
                 expr: Box::new(expr),
-            };
+            });
         }
         self.primary()
     }
 
-    pub fn primary(&mut self) -> Expression {
+    pub fn primary(&mut self) -> Result<Expression, String> {
         if self.match_(&[TokenType::FALSE]) {
-            return Expression::Literal(Literal::Boolean(false));
+            return Ok(Expression::Literal(Literal::Boolean(false)));
         }
 
         if self.match_(&[TokenType::TRUE]) {
-            return Expression::Literal(Literal::Boolean(true));
+            return Ok(Expression::Literal(Literal::Boolean(true)));
         }
 
         if self.match_(&[TokenType::NIL]) {
-            return Expression::Literal(Literal::Nil);
+            return Ok(Expression::Literal(Literal::Nil));
         }
 
         if self.match_(&[TokenType::NUMBER, TokenType::STRING]) {
-            return Expression::Literal(self.previous().literal.as_ref().unwrap().clone());
+            return Ok(Expression::Literal(
+                self.previous().literal.as_ref().unwrap().clone(),
+            ));
         }
 
         if self.match_(&[TokenType::LEFT_PAREN]) {
-            let expression = self.expression();
-            self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after expression.");
-            return Expression::Group(Box::new(expression));
+            let expression = self.expression()?;
+            self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after expression.")?;
+            return Ok(Expression::Group(Box::new(expression)));
         }
 
-        self.error(self.peek(), "Expect expression.")
+        Err(self.error(self.peek(), "Expect expression."))
     }
 
     fn match_(&mut self, token_types: &[TokenType]) -> bool {
@@ -128,18 +128,15 @@ impl<'a> Parser<'a> {
         false
     }
 
-    fn consume(&mut self, token_type: &TokenType, message: &str) -> &Token {
+    fn consume(&mut self, token_type: &TokenType, message: &str) -> Result<&Token, String> {
         if self.check(token_type) {
-            return self.advance();
+            return Ok(self.advance());
         }
-        self.error(self.peek(), message)
+        Err(self.error(self.peek(), message))
     }
 
     fn check(&self, token_type: &TokenType) -> bool {
-        if self.end() {
-            return false;
-        }
-        self.peek().token_type == *token_type
+        !self.end() && self.peek().token_type == *token_type
     }
 
     fn advance(&mut self) -> &Token {
@@ -161,11 +158,10 @@ impl<'a> Parser<'a> {
         &self.tokens[self.current - 1]
     }
 
-    fn error(&self, token: &Token, message: &str) -> ! {
-        eprintln!(
+    fn error(&self, token: &Token, message: &str) -> String {
+        format!(
             "[line {}] Error at '{}': {message}",
             token.line_num, token.lexeme
-        );
-        exit(65);
+        )
     }
 }
