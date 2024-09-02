@@ -42,7 +42,7 @@ impl Interpreter {
                 Literal::Nil => Literal::Nil,
             },
             Expression::Group(expr) => self.evaluate(expr)?,
-            Expression::Unary(op, expr) => {
+            Expression::Unary { op, expr } => {
                 let literal = self.evaluate(expr)?;
                 match op.token_type {
                     TokenType::BANG => match literal {
@@ -58,7 +58,7 @@ impl Interpreter {
                     _ => unreachable!(),
                 }
             }
-            Expression::Binary(op, left, right) => {
+            Expression::Binary { op, left, right } => {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
                 match op.token_type {

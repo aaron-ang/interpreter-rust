@@ -32,8 +32,15 @@ impl Display for Literal {
 pub enum Expression {
     Literal(Literal),
     Group(Box<Expression>),
-    Unary(Token, Box<Expression>),
-    Binary(Token, Box<Expression>, Box<Expression>),
+    Unary {
+        op: Token,
+        expr: Box<Expression>,
+    },
+    Binary {
+        op: Token,
+        left: Box<Expression>,
+        right: Box<Expression>,
+    },
 }
 
 impl Display for Expression {
@@ -43,10 +50,10 @@ impl Display for Expression {
             Expression::Group(g) => {
                 write!(f, "(group {g})")
             }
-            Expression::Unary(op, expr) => {
+            Expression::Unary { op, expr } => {
                 write!(f, "({} {})", op.lexeme, expr)
             }
-            Expression::Binary(op, left, right) => {
+            Expression::Binary { op, left, right } => {
                 write!(f, "({} {} {})", op.lexeme, left, right)
             }
         }
