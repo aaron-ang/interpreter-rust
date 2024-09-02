@@ -13,26 +13,23 @@ pub enum TokenType {
     MINUS,
     PLUS,
     SEMICOLON,
+    SLASH,
     STAR,
 
     EQUAL,
     EQUAL_EQUAL,
-
     BANG,
     BANG_EQUAL,
-
     LESS,
     LESS_EQUAL,
     GREATER,
     GREATER_EQUAL,
 
-    SLASH,
     COMMENT,
 
+    IDENTIFIER,
     STRING,
     NUMBER,
-
-    IDENTIFIER,
 
     AND,
     CLASS,
@@ -50,6 +47,8 @@ pub enum TokenType {
     TRUE,
     VAR,
     WHILE,
+
+    EOF,
 }
 
 pub fn get_token_type(identifier: &str) -> TokenType {
