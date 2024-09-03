@@ -23,8 +23,12 @@ impl<'a> Scanner<'a> {
         while self.chars.peek().is_some() {
             self.scan_token();
         }
-        self.tokens
-            .push(Token::new(TokenType::EOF, "".into(), None, self.line_num));
+        self.tokens.push(Token {
+            token_type: TokenType::EOF,
+            lexeme: String::new(),
+            literal: None,
+            line_num: self.line_num,
+        });
         self.tokens.clone()
     }
 
@@ -60,12 +64,12 @@ impl<'a> Scanner<'a> {
     }
 
     fn add_token(&mut self, token_type: TokenType, literal: Option<Literal>) {
-        self.tokens.push(Token::new(
+        self.tokens.push(Token {
             token_type,
-            self.current.clone(),
+            lexeme: self.current.clone(),
             literal,
-            self.line_num,
-        ));
+            line_num: self.line_num,
+        });
     }
 
     fn handle_comparison(&mut self, c: char) {

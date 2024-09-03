@@ -81,22 +81,6 @@ pub struct Token {
     pub line_num: usize,
 }
 
-impl Token {
-    pub fn new(
-        token_type: TokenType,
-        lexeme: String,
-        literal: Option<Literal>,
-        line_num: usize,
-    ) -> Token {
-        Token {
-            token_type,
-            lexeme,
-            literal,
-            line_num,
-        }
-    }
-}
-
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match &self.literal {
@@ -181,4 +165,5 @@ pub enum Statement {
         name: Token,
         init: Option<Expression>,
     },
+    Block(Vec<Statement>),
 }

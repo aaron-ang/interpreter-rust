@@ -36,6 +36,9 @@ impl Interpreter {
                 };
                 self.environment.insert(name.lexeme, value);
             }
+            Statement::Block(statements) => {
+                self.execute_block(statements)?;
+            }
         }
         Ok(())
     }
@@ -105,6 +108,15 @@ impl Interpreter {
             }
         };
         Ok(literal)
+    }
+
+    fn execute_block(&mut self, statements: Vec<Statement>) -> Result<(), &'static str> {
+        let previous = self.environment.clone();
+        for statement in statements {
+            self.execute(statement)?;
+        }
+        self.environment = previous;
+        Ok(())
     }
 
     fn get_variable(&self, var: &Token) -> Result<Literal, &'static str> {

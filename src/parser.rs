@@ -1,4 +1,5 @@
 use crate::grammar::*;
+
 pub struct Parser<'a> {
     tokens: &'a [Token],
     current: usize,
@@ -24,6 +25,13 @@ impl<'a> Parser<'a> {
             let expression = self.expression()?;
             self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
             Ok(Statement::Print(expression))
+        } else if self.match_(&[TokenType::LEFT_BRACE]) {
+            let mut statements = vec![];
+            while !self.is_cur_match(&TokenType::RIGHT_BRACE) && !self.end() {
+                statements.push(self.statement()?);
+            }
+            self.consume(&TokenType::RIGHT_BRACE, "Expect '}' after block.")?;
+            Ok(Statement::Block(statements))
         } else {
             let expression = self.expression()?;
             self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.")?;
@@ -148,13 +156,13 @@ impl<'a> Parser<'a> {
     }
 
     fn match_(&mut self, token_types: &[TokenType]) -> bool {
-        for token_type in token_types {
-            if self.is_cur_match(token_type) {
-                self.advance();
-                return true;
-            }
+        let is_match = token_types
+            .iter()
+            .any(|token_type| self.is_cur_match(token_type));
+        if is_match {
+            self.advance();
         }
-        false
+        is_match
     }
 
     fn consume(&mut self, token_type: &TokenType, message: &str) -> Result<&Token, String> {
@@ -189,8 +197,8 @@ impl<'a> Parser<'a> {
 
     fn error(&self, token: &Token, message: &str) -> String {
         format!(
-            "[line {}] Error at '{}': {message}",
-            token.line_num, token.lexeme
+            "[line {}] Error at '{}': {}",
+            token.line_num, token.lexeme, message
         )
     }
 }
