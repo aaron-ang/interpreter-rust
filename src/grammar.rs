@@ -128,46 +128,53 @@ impl Display for Literal {
 
 #[derive(Debug, Clone)]
 pub enum Expression {
-    Literal(Literal),
-    Group(Box<Expression>),
-    Unary {
-        op: Token,
-        expr: Box<Expression>,
+    Assign {
+        name: Token,
+        value: Box<Expression>,
     },
     Binary {
-        op: Token,
         left: Box<Expression>,
+        op: Token,
+        right: Box<Expression>,
+    },
+    Group(Box<Expression>),
+    Literal(Literal),
+    Logical {
+        left: Box<Expression>,
+        op: Token,
+        right: Box<Expression>,
+    },
+    Unary {
+        op: Token,
         right: Box<Expression>,
     },
     Variable(Token),
-    Assign {
-        name: Token,
-        right: Box<Expression>,
-    },
 }
 
 impl Display for Expression {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Expression::Literal(l) => write!(f, "{l}"),
+            Expression::Assign { name, value } => {
+                write!(f, "(assign {} {})", name.lexeme, value)
+            }
+            Expression::Binary { left, op, right } => {
+                write!(f, "({} {} {})", op.lexeme, left, right)
+            }
             Expression::Group(g) => {
                 write!(f, "(group {g})")
             }
-            Expression::Unary { op, expr } => {
-                write!(f, "({} {})", op.lexeme, expr)
-            }
-            Expression::Binary { op, left, right } => {
+            Expression::Literal(l) => write!(f, "{l}"),
+            Expression::Logical { left, op, right } => {
                 write!(f, "({} {} {})", op.lexeme, left, right)
             }
-            Expression::Variable(name) => write!(f, "(var {})", name.lexeme),
-            Expression::Assign { name, right } => {
-                write!(f, "(assign {} {})", name.lexeme, right)
+            Expression::Unary { op, right } => {
+                write!(f, "({} {})", op.lexeme, right)
             }
+            Expression::Variable(name) => write!(f, "(var {})", name.lexeme),
         }
     }
 }
 
-#[derive(Debug, Clone)]
 pub enum Statement {
     Expression(Expression),
     Print(Expression),

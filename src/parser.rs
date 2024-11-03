@@ -13,15 +13,37 @@ impl<'a> Parser<'a> {
     pub fn parse(&mut self) -> Result<Vec<Statement>, String> {
         let mut statements = vec![];
         while !self.end() {
-            statements.push(self.statement()?);
+            statements.push(self.declaration()?);
         }
         Ok(statements)
     }
 
-    fn statement(&mut self) -> Result<Statement, String> {
+    fn declaration(&mut self) -> Result<Statement, String> {
         if self.match_(&[TokenType::VAR]) {
-            return self.variable();
-        } else if self.match_(&[TokenType::IF]) {
+            self.variable()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn variable(&mut self) -> Result<Statement, String> {
+        let name = self
+            .consume(&TokenType::IDENTIFIER, "Expect variable name.")?
+            .clone();
+        let init = if self.match_(&[TokenType::EQUAL]) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume(
+            &TokenType::SEMICOLON,
+            "Expect ';' after variable declaration.",
+        )?;
+        Ok(Statement::Variable { name, init })
+    }
+
+    fn statement(&mut self) -> Result<Statement, String> {
+        if self.match_(&[TokenType::IF]) {
             self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'if'.")?;
             let condition = self.expression()?;
             self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after if condition.")?;
@@ -43,7 +65,7 @@ impl<'a> Parser<'a> {
         } else if self.match_(&[TokenType::LEFT_BRACE]) {
             let mut statements = vec![];
             while !self.is_cur_match(&TokenType::RIGHT_BRACE) && !self.end() {
-                statements.push(self.statement()?);
+                statements.push(self.declaration()?);
             }
             self.consume(&TokenType::RIGHT_BRACE, "Expect '}' after block.")?;
             Ok(Statement::Block(statements))
@@ -54,38 +76,49 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn variable(&mut self) -> Result<Statement, String> {
-        let name = self
-            .consume(&TokenType::IDENTIFIER, "Expect variable name.")?
-            .clone();
-        let init = if self.match_(&[TokenType::EQUAL]) {
-            Some(self.expression()?)
-        } else {
-            None
-        };
-        self.consume(
-            &TokenType::SEMICOLON,
-            "Expect ';' after variable declaration.",
-        )?;
-        Ok(Statement::Variable { name, init })
-    }
-
     pub fn expression(&mut self) -> Result<Expression, String> {
-        let expression = self.binary_operation(
-            &[TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL],
-            Self::comparison,
-        )?;
+        let expression = self.logic_or()?;
         if self.match_(&[TokenType::EQUAL]) {
-            let right = self.expression()?;
+            let value = self.expression()?;
             if let Expression::Variable(name) = expression {
                 return Ok(Expression::Assign {
                     name,
-                    right: Box::new(right),
+                    value: Box::new(value),
                 });
             }
-            return Err(self.error(self.previous(), "Invalid assignment target."));
+            Err(self.error(self.previous(), "Invalid assignment target."))
+        } else {
+            Ok(expression)
         }
-        Ok(expression)
+    }
+
+    fn logic_or(&mut self) -> Result<Expression, String> {
+        self.logical_operation(&[TokenType::OR], Self::equality)
+    }
+
+    fn logical_operation(
+        &mut self,
+        operators: &[TokenType],
+        next_precedence: fn(&mut Self) -> Result<Expression, String>,
+    ) -> Result<Expression, String> {
+        let mut left = next_precedence(self)?;
+        while self.match_(operators) {
+            let op = self.previous().clone();
+            let right = next_precedence(self)?;
+            left = Expression::Logical {
+                left: Box::new(left),
+                op,
+                right: Box::new(right),
+            };
+        }
+        Ok(left)
+    }
+
+    fn equality(&mut self) -> Result<Expression, String> {
+        self.binary_operation(
+            &[TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL],
+            Self::comparison,
+        )
     }
 
     fn comparison(&mut self) -> Result<Expression, String> {
@@ -118,8 +151,8 @@ impl<'a> Parser<'a> {
             let op = self.previous().clone();
             let right = next_precedence(self)?;
             left = Expression::Binary {
-                op,
                 left: Box::new(left),
+                op,
                 right: Box::new(right),
             };
         }
@@ -129,10 +162,10 @@ impl<'a> Parser<'a> {
     pub fn unary(&mut self) -> Result<Expression, String> {
         if self.match_(&[TokenType::BANG, TokenType::MINUS]) {
             let op = self.previous().clone();
-            let expr = self.unary()?;
+            let right = self.unary()?;
             return Ok(Expression::Unary {
                 op,
-                expr: Box::new(expr),
+                right: Box::new(right),
             });
         }
         self.primary()

@@ -99,25 +99,12 @@ impl Interpreter {
 
     pub fn evaluate(&mut self, expr: &Expression) -> Result<Literal, &'static str> {
         let literal = match expr {
-            Expression::Literal(l) => l.clone(),
-            Expression::Group(expr) => self.evaluate(expr)?,
-            Expression::Unary { op, expr } => {
-                let literal = self.evaluate(expr)?;
-                match op.token_type {
-                    TokenType::BANG => match literal {
-                        Literal::Boolean(b) => Literal::Boolean(!b),
-                        Literal::Number(n) => Literal::Boolean(n == 0.0),
-                        Literal::String(s) => Literal::Boolean(s.is_empty()),
-                        Literal::Nil => Literal::Boolean(true),
-                    },
-                    TokenType::MINUS => match literal {
-                        Literal::Number(n) => Literal::Number(-n),
-                        _ => return Err("Operand must be a number."),
-                    },
-                    _ => unreachable!(),
-                }
+            Expression::Assign { name, value } => {
+                let value = self.evaluate(value)?;
+                self.assign_variable(name, &value)?;
+                value
             }
-            Expression::Binary { op, left, right } => {
+            Expression::Binary { left, op, right } => {
                 let left = self.evaluate(left)?;
                 let right = self.evaluate(right)?;
                 match op.token_type {
@@ -154,12 +141,38 @@ impl Interpreter {
                     _ => todo!(),
                 }
             }
-            Expression::Variable(var) => self.get_variable(var)?,
-            Expression::Assign { name, right } => {
-                let value = self.evaluate(right)?;
-                self.reassign_variable(name, &value)?;
-                value
+            Expression::Group(expr) => self.evaluate(expr)?,
+            Expression::Literal(l) => l.clone(),
+            Expression::Logical { left, op, right } => {
+                let left = self.evaluate(left)?;
+                let left_truthy = left.is_truthy();
+                let eval_right = match op.token_type {
+                    TokenType::OR => !left_truthy,
+                    _ => unreachable!(),
+                };
+                if eval_right {
+                    self.evaluate(right)?
+                } else {
+                    left
+                }
             }
+            Expression::Unary { op, right } => {
+                let literal = self.evaluate(right)?;
+                match op.token_type {
+                    TokenType::BANG => match literal {
+                        Literal::Boolean(b) => Literal::Boolean(!b),
+                        Literal::Number(n) => Literal::Boolean(n == 0.0),
+                        Literal::String(s) => Literal::Boolean(s.is_empty()),
+                        Literal::Nil => Literal::Boolean(true),
+                    },
+                    TokenType::MINUS => match literal {
+                        Literal::Number(n) => Literal::Number(-n),
+                        _ => return Err("Operand must be a number."),
+                    },
+                    _ => unreachable!(),
+                }
+            }
+            Expression::Variable(var) => self.get_variable(var)?,
         };
         Ok(literal)
     }
@@ -184,7 +197,7 @@ impl Interpreter {
         }
     }
 
-    fn reassign_variable(&mut self, var: &Token, value: &Literal) -> Result<(), &'static str> {
+    fn assign_variable(&mut self, var: &Token, value: &Literal) -> Result<(), &'static str> {
         let lexeme = &var.lexeme;
         if !self.environment.set(lexeme, value) {
             let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line_num);
