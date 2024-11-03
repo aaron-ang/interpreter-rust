@@ -21,6 +21,15 @@ impl<'a> Parser<'a> {
     fn statement(&mut self) -> Result<Statement, String> {
         if self.match_(&[TokenType::VAR]) {
             return self.variable();
+        } else if self.match_(&[TokenType::IF]) {
+            self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'if'.")?;
+            let condition = self.expression()?;
+            self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after if condition.")?;
+            let then_branch = Box::new(self.statement()?);
+            Ok(Statement::If {
+                condition,
+                then_branch,
+            })
         } else if self.match_(&[TokenType::PRINT]) {
             let expression = self.expression()?;
             self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;

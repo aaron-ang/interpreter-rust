@@ -2,14 +2,57 @@ use std::collections::HashMap;
 
 use crate::grammar::*;
 
+pub struct Environment {
+    scopes: Vec<HashMap<String, Literal>>,
+}
+
+impl Environment {
+    fn new() -> Self {
+        Environment {
+            scopes: vec![HashMap::new()],
+        }
+    }
+
+    fn declare(&mut self, name: String, value: Literal) {
+        self.scopes.last_mut().unwrap().insert(name, value);
+    }
+
+    fn get(&self, name: &String) -> Option<Literal> {
+        for scope in self.scopes.iter().rev() {
+            if let Some(val) = scope.get(name) {
+                return Some(val.clone());
+            }
+        }
+        None
+    }
+
+    fn set(&mut self, name: &String, val: &Literal) -> bool {
+        for scope in self.scopes.iter_mut().rev() {
+            if scope.contains_key(name) {
+                scope.insert(name.clone(), val.clone());
+                return true;
+            }
+        }
+        false
+    }
+
+    fn push(&mut self) {
+        self.scopes.push(HashMap::new());
+    }
+
+    fn pop(&mut self) {
+        self.scopes.pop();
+    }
+}
+
 pub struct Interpreter {
-    environment: HashMap<String, Literal>,
+    environment: Environment,
 }
 
 impl Interpreter {
     pub fn new() -> Self {
         Interpreter {
-            environment: HashMap::new(),
+            environment: Environment::new(),
         }
     }
 
@@ -29,12 +72,20 @@ impl Interpreter {
             Statement::Expression(expr) => {
                 self.evaluate(&expr)?;
             }
+            Statement::If {
+                condition,
+                then_branch,
+            } => {
+                if self.evaluate(&condition)?.is_truthy() {
+                    self.execute(*then_branch)?;
+                }
+            }
             Statement::Variable { name, init } => {
                 let value = match init {
                     Some(expr) => self.evaluate(&expr)?,
                     None => Literal::Nil,
                 };
-                self.environment.insert(name.lexeme, value);
+                self.environment.declare(name.lexeme, value);
             }
             Statement::Block(statements) => {
                 self.execute_block(statements)?;
@@ -111,17 +162,17 @@ impl Interpreter {
     }
 
     fn execute_block(&mut self, statements: Vec<Statement>) -> Result<(), &'static str> {
-        let previous = self.environment.clone();
+        self.environment.push();
         for statement in statements {
             self.execute(statement)?;
         }
-        self.environment = previous;
+        self.environment.pop();
         Ok(())
     }
 
     fn get_variable(&self, var: &Token) -> Result<Literal, &'static str> {
         let lexeme = &var.lexeme;
-        match self.environment.get(lexeme.as_str()) {
+        match self.environment.get(lexeme) {
             Some(value) => Ok(value.clone()),
             None => {
                 let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line_num);
@@ -132,13 +183,11 @@ impl Interpreter {
 
     fn reassign_variable(&mut self, var: &Token, value: &Literal) -> Result<(), &'static str> {
         let lexeme = &var.lexeme;
-        if self.environment.contains_key(lexeme.as_str()) {
-            self.environment.insert(lexeme.clone(), value.clone());
-            Ok(())
-        } else {
+        if !self.environment.set(lexeme, value) {
             let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line_num);
-            Err(Box::leak(msg.into_boxed_str()))
+            return Err(Box::leak(msg.into_boxed_str()));
         }
+        Ok(())
     }
 }
 

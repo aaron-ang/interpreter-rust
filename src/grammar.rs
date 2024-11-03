@@ -98,6 +98,16 @@ pub enum Literal {
     Nil,
 }
 
+impl Literal {
+    pub fn is_truthy(&self) -> bool {
+        match self {
+            Literal::Boolean(b) => *b,
+            Literal::Nil => false,
+            _ => true,
+        }
+    }
+}
+
 impl Display for Literal {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
@@ -161,6 +171,10 @@ impl Display for Expression {
 pub enum Statement {
     Expression(Expression),
     Print(Expression),
+    If {
+        condition: Expression,
+        then_branch: Box<Statement>,
+    },
     Variable {
         name: Token,
         init: Option<Expression>,
