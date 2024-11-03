@@ -78,15 +78,16 @@ pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
     pub literal: Option<Literal>,
-    pub line_num: usize,
+    pub line: usize,
 }
 
 impl Display for Token {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match &self.literal {
-            Some(value) => write!(f, "{:?} {} {value}", self.token_type, self.lexeme),
-            None => write!(f, "{:?} {} null", self.token_type, self.lexeme),
-        }
+        let literal = match &self.literal {
+            Some(value) => value.to_string(),
+            None => "null".to_string(),
+        };
+        write!(f, "{:?} {} {}", self.token_type, self.lexeme, literal)
     }
 }
 

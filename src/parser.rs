@@ -12,7 +12,7 @@ impl<'a> Parser<'a> {
 
     pub fn parse(&mut self) -> Result<Vec<Statement>, String> {
         let mut statements = vec![];
-        while !self.end() {
+        while !self.is_at_end() {
             statements.push(self.declaration()?);
         }
         Ok(statements)
@@ -73,14 +73,14 @@ impl<'a> Parser<'a> {
             Some(self.statement()?)
         };
 
-        let condition = if !self.is_cur_match(&TokenType::SEMICOLON) {
+        let condition = if !self.check(&TokenType::SEMICOLON) {
             self.expression()?
         } else {
             Expression::Literal(Literal::Boolean(true))
         };
         self.consume(&TokenType::SEMICOLON, "Expect ';' after loop condition.")?;
 
-        let increment = if !self.is_cur_match(&TokenType::RIGHT_PAREN) {
+        let increment = if !self.check(&TokenType::RIGHT_PAREN) {
             Some(self.expression()?)
         } else {
             None
@@ -132,7 +132,7 @@ impl<'a> Parser<'a> {
 
     fn block(&mut self) -> Result<Vec<Statement>, String> {
         let mut statements = vec![];
-        while !self.is_cur_match(&TokenType::RIGHT_BRACE) && !self.end() {
+        while !self.check(&TokenType::RIGHT_BRACE) && !self.is_at_end() {
             statements.push(self.declaration()?);
         }
         self.consume(&TokenType::RIGHT_BRACE, "Expect '}' after block.")?;
@@ -271,34 +271,35 @@ impl<'a> Parser<'a> {
     }
 
     fn match_(&mut self, token_types: &[TokenType]) -> bool {
-        let is_match = token_types
-            .iter()
-            .any(|token_type| self.is_cur_match(token_type));
-        if is_match {
-            self.advance();
-        }
-        is_match
+        token_types.iter().any(|token_type| {
+            if self.check(token_type) {
+                self.advance();
+                true
+            } else {
+                false
+            }
+        })
     }
 
     fn consume(&mut self, token_type: &TokenType, message: &str) -> Result<&Token, String> {
-        if self.is_cur_match(token_type) {
+        if self.check(token_type) {
             return Ok(self.advance());
         }
         Err(self.error(self.peek(), message))
     }
 
-    fn is_cur_match(&self, token_type: &TokenType) -> bool {
-        !self.end() && self.peek().token_type == *token_type
+    fn check(&self, token_type: &TokenType) -> bool {
+        !self.is_at_end() && self.peek().token_type == *token_type
     }
 
     fn advance(&mut self) -> &Token {
-        if !self.end() {
+        if !self.is_at_end() {
             self.current += 1;
         }
         self.previous()
     }
 
-    fn end(&self) -> bool {
+    fn is_at_end(&self) -> bool {
         self.peek().token_type == TokenType::EOF
     }
 
@@ -313,7 +314,7 @@ impl<'a> Parser<'a> {
     fn error(&self, token: &Token, message: &str) -> String {
         format!(
             "[line {}] Error at '{}': {}",
-            token.line_num, token.lexeme, message
+            token.line, token.lexeme, message
         )
     }
 }

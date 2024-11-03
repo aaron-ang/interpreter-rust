@@ -198,7 +198,7 @@ impl Interpreter {
         match self.environment.get(lexeme) {
             Some(value) => Ok(value.clone()),
             None => {
-                let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line_num);
+                let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line);
                 Err(Box::leak(msg.into_boxed_str()))
             }
         }
@@ -207,7 +207,7 @@ impl Interpreter {
     fn assign_variable(&mut self, var: &Token, value: &Literal) -> Result<(), &'static str> {
         let lexeme = &var.lexeme;
         if !self.environment.set(lexeme, value) {
-            let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line_num);
+            let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line);
             return Err(Box::leak(msg.into_boxed_str()));
         }
         Ok(())
