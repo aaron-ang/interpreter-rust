@@ -26,9 +26,15 @@ impl<'a> Parser<'a> {
             let condition = self.expression()?;
             self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after if condition.")?;
             let then_branch = Box::new(self.statement()?);
+            let else_branch = if self.match_(&[TokenType::ELSE]) {
+                Some(Box::new(self.statement()?))
+            } else {
+                None
+            };
             Ok(Statement::If {
                 condition,
                 then_branch,
+                else_branch,
             })
         } else if self.match_(&[TokenType::PRINT]) {
             let expression = self.expression()?;

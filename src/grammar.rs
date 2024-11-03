@@ -174,6 +174,7 @@ pub enum Statement {
     If {
         condition: Expression,
         then_branch: Box<Statement>,
+        else_branch: Option<Box<Statement>>,
     },
     Variable {
         name: Token,
