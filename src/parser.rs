@@ -62,6 +62,12 @@ impl<'a> Parser<'a> {
             let expression = self.expression()?;
             self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
             Ok(Statement::Print(expression))
+        } else if self.match_(&[TokenType::WHILE]) {
+            self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'while'.")?;
+            let condition = self.expression()?;
+            self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after condition.")?;
+            let body = Box::new(self.statement()?);
+            Ok(Statement::While { condition, body })
         } else if self.match_(&[TokenType::LEFT_BRACE]) {
             let mut statements = vec![];
             while !self.is_cur_match(&TokenType::RIGHT_BRACE) && !self.end() {

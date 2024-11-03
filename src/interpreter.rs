@@ -57,41 +57,47 @@ impl Interpreter {
     }
 
     pub fn interpret(&mut self, statements: Vec<Statement>) -> Result<(), &'static str> {
-        for statement in statements {
+        for statement in statements.iter() {
             self.execute(statement)?;
         }
         Ok(())
     }
 
-    fn execute(&mut self, statement: Statement) -> Result<(), &'static str> {
+    fn execute(&mut self, statement: &Statement) -> Result<(), &'static str> {
         match statement {
-            Statement::Print(expr) => match self.evaluate(&expr)? {
-                Literal::Number(n) => println!("{}", n),
-                val => println!("{}", val),
-            },
+            Statement::Block(statements) => {
+                self.execute_block(statements)?;
+            }
+
             Statement::Expression(expr) => {
-                self.evaluate(&expr)?;
+                self.evaluate(expr)?;
             }
             Statement::If {
                 condition,
                 then_branch,
                 else_branch,
             } => {
-                if self.evaluate(&condition)?.is_truthy() {
-                    self.execute(*then_branch)?;
+                if self.evaluate(condition)?.is_truthy() {
+                    self.execute(then_branch)?;
                 } else if let Some(else_branch) = else_branch {
-                    self.execute(*else_branch)?;
+                    self.execute(else_branch)?;
                 }
             }
+            Statement::Print(expr) => match self.evaluate(expr)? {
+                Literal::Number(n) => println!("{}", n),
+                val => println!("{}", val),
+            },
             Statement::Variable { name, init } => {
                 let value = match init {
-                    Some(expr) => self.evaluate(&expr)?,
+                    Some(expr) => self.evaluate(expr)?,
                     None => Literal::Nil,
                 };
-                self.environment.declare(name.lexeme, value);
+                self.environment.declare(name.lexeme.clone(), value);
             }
-            Statement::Block(statements) => {
-                self.execute_block(statements)?;
+            Statement::While { condition, body } => {
+                while self.evaluate(condition)?.is_truthy() {
+                    self.execute(body)?;
+                }
             }
         }
         Ok(())
@@ -178,9 +184,9 @@ impl Interpreter {
         Ok(literal)
     }
 
-    fn execute_block(&mut self, statements: Vec<Statement>) -> Result<(), &'static str> {
+    fn execute_block(&mut self, statements: &Vec<Statement>) -> Result<(), &'static str> {
         self.environment.push();
-        for statement in statements {
+        for statement in statements.iter() {
             self.execute(statement)?;
         }
         self.environment.pop();

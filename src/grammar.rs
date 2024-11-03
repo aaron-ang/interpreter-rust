@@ -175,17 +175,22 @@ impl Display for Expression {
     }
 }
 
+#[derive(Debug, Clone)]
 pub enum Statement {
+    Block(Vec<Statement>),
     Expression(Expression),
-    Print(Expression),
     If {
         condition: Expression,
         then_branch: Box<Statement>,
         else_branch: Option<Box<Statement>>,
     },
+    Print(Expression),
     Variable {
         name: Token,
         init: Option<Expression>,
     },
-    Block(Vec<Statement>),
+    While {
+        condition: Expression,
+        body: Box<Statement>,
+    },
 }
