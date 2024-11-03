@@ -43,43 +43,100 @@ impl<'a> Parser<'a> {
     }
 
     fn statement(&mut self) -> Result<Statement, String> {
-        if self.match_(&[TokenType::IF]) {
-            self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'if'.")?;
-            let condition = self.expression()?;
-            self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after if condition.")?;
-            let then_branch = Box::new(self.statement()?);
-            let else_branch = if self.match_(&[TokenType::ELSE]) {
-                Some(Box::new(self.statement()?))
-            } else {
-                None
-            };
-            Ok(Statement::If {
-                condition,
-                then_branch,
-                else_branch,
-            })
+        if self.match_(&[TokenType::FOR]) {
+            self.for_statement()
+        } else if self.match_(&[TokenType::IF]) {
+            self.if_statement()
         } else if self.match_(&[TokenType::PRINT]) {
             let expression = self.expression()?;
             self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
             Ok(Statement::Print(expression))
         } else if self.match_(&[TokenType::WHILE]) {
-            self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'while'.")?;
-            let condition = self.expression()?;
-            self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after condition.")?;
-            let body = Box::new(self.statement()?);
-            Ok(Statement::While { condition, body })
+            self.while_statement()
         } else if self.match_(&[TokenType::LEFT_BRACE]) {
-            let mut statements = vec![];
-            while !self.is_cur_match(&TokenType::RIGHT_BRACE) && !self.end() {
-                statements.push(self.declaration()?);
-            }
-            self.consume(&TokenType::RIGHT_BRACE, "Expect '}' after block.")?;
-            Ok(Statement::Block(statements))
+            Ok(Statement::Block(self.block()?))
         } else {
             let expression = self.expression()?;
             self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.")?;
             Ok(Statement::Expression(expression))
         }
+    }
+
+    fn for_statement(&mut self) -> Result<Statement, String> {
+        self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'for'.")?;
+
+        let initializer = if self.match_(&[TokenType::SEMICOLON]) {
+            None
+        } else if self.match_(&[TokenType::VAR]) {
+            Some(self.variable()?)
+        } else {
+            Some(self.statement()?)
+        };
+
+        let condition = if !self.is_cur_match(&TokenType::SEMICOLON) {
+            self.expression()?
+        } else {
+            Expression::Literal(Literal::Boolean(true))
+        };
+        self.consume(&TokenType::SEMICOLON, "Expect ';' after loop condition.")?;
+
+        let increment = if !self.is_cur_match(&TokenType::RIGHT_PAREN) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after for clauses.")?;
+
+        let mut body = self.statement()?;
+
+        if let Some(increment) = increment {
+            body = Statement::Block(vec![body, Statement::Expression(increment)]);
+        }
+
+        body = Statement::While {
+            condition,
+            body: Box::new(body),
+        };
+
+        if let Some(initializer) = initializer {
+            body = Statement::Block(vec![initializer, body]);
+        }
+
+        Ok(body)
+    }
+
+    fn if_statement(&mut self) -> Result<Statement, String> {
+        self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'if'.")?;
+        let condition = self.expression()?;
+        self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after if condition.")?;
+        let then_branch = Box::new(self.statement()?);
+        let else_branch = if self.match_(&[TokenType::ELSE]) {
+            Some(Box::new(self.statement()?))
+        } else {
+            None
+        };
+        Ok(Statement::If {
+            condition,
+            then_branch,
+            else_branch,
+        })
+    }
+
+    fn while_statement(&mut self) -> Result<Statement, String> {
+        self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'while'.")?;
+        let condition = self.expression()?;
+        self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after condition.")?;
+        let body = Box::new(self.statement()?);
+        Ok(Statement::While { condition, body })
+    }
+
+    fn block(&mut self) -> Result<Vec<Statement>, String> {
+        let mut statements = vec![];
+        while !self.is_cur_match(&TokenType::RIGHT_BRACE) && !self.end() {
+            statements.push(self.declaration()?);
+        }
+        self.consume(&TokenType::RIGHT_BRACE, "Expect '}' after block.")?;
+        Ok(statements)
     }
 
     pub fn expression(&mut self) -> Result<Expression, String> {
@@ -169,7 +226,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    pub fn unary(&mut self) -> Result<Expression, String> {
+    fn unary(&mut self) -> Result<Expression, String> {
         if self.match_(&[TokenType::BANG, TokenType::MINUS]) {
             let op = self.previous().clone();
             let right = self.unary()?;
@@ -181,7 +238,7 @@ impl<'a> Parser<'a> {
         self.primary()
     }
 
-    pub fn primary(&mut self) -> Result<Expression, String> {
+    fn primary(&mut self) -> Result<Expression, String> {
         if self.match_(&[TokenType::FALSE]) {
             return Ok(Expression::Literal(Literal::Boolean(false)));
         }
