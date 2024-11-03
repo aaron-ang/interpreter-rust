@@ -93,7 +93,11 @@ impl<'a> Parser<'a> {
     }
 
     fn logic_or(&mut self) -> Result<Expression, String> {
-        self.logical_operation(&[TokenType::OR], Self::equality)
+        self.logical_operation(&[TokenType::OR], Self::logic_and)
+    }
+
+    fn logic_and(&mut self) -> Result<Expression, String> {
+        self.logical_operation(&[TokenType::AND], Self::equality)
     }
 
     fn logical_operation(

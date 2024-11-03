@@ -148,6 +148,7 @@ impl Interpreter {
                 let left_truthy = left.is_truthy();
                 let eval_right = match op.token_type {
                     TokenType::OR => !left_truthy,
+                    TokenType::AND => left_truthy,
                     _ => unreachable!(),
                 };
                 if eval_right {
