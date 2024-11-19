@@ -1,4 +1,6 @@
-use std::fmt::Display;
+use std::fmt;
+
+use crate::interpreter::Interpreter;
 
 #[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
@@ -81,8 +83,8 @@ pub struct Token {
     pub line: usize,
 }
 
-impl Display for Token {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Token {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let literal = match &self.literal {
             Some(value) => value.to_string(),
             None => "null".to_string(),
@@ -97,6 +99,7 @@ pub enum Literal {
     String(String),
     Number(f64),
     Nil,
+    Callable(Callable),
 }
 
 impl Literal {
@@ -104,13 +107,13 @@ impl Literal {
         match self {
             Literal::Boolean(b) => *b,
             Literal::Nil => false,
-            _ => true,
+            _ => true, // Everything else is truthy, including empty strings
         }
     }
 }
 
-impl Display for Literal {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Literal::Boolean(b) => write!(f, "{b}"),
             Literal::String(s) => write!(f, "{s}"),
@@ -123,6 +126,7 @@ impl Display for Literal {
                 }
             }
             Literal::Nil => write!(f, "nil"),
+            Literal::Callable(c) => write!(f, "{}", c.to_string()),
         }
     }
 }
@@ -138,7 +142,12 @@ pub enum Expression {
         op: Token,
         right: Box<Expression>,
     },
-    Group(Box<Expression>),
+    Call {
+        callee: Box<Expression>,
+        paren: Token, // to report location of runtime error caused by a function call
+        arguments: Vec<Expression>,
+    },
+    Grouping(Box<Expression>),
     Literal(Literal),
     Logical {
         left: Box<Expression>,
@@ -152,8 +161,8 @@ pub enum Expression {
     Variable(Token),
 }
 
-impl Display for Expression {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Display for Expression {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Expression::Assign { name, value } => {
                 write!(f, "(assign {} {})", name.lexeme, value)
@@ -161,7 +170,19 @@ impl Display for Expression {
             Expression::Binary { left, op, right } => {
                 write!(f, "({} {} {})", op.lexeme, left, right)
             }
-            Expression::Group(g) => {
+            Expression::Call {
+                callee,
+                paren: _,
+                arguments,
+            } => {
+                let args = arguments
+                    .iter()
+                    .map(|arg| arg.to_string())
+                    .collect::<Vec<String>>()
+                    .join(", ");
+                write!(f, "(call {} {})", callee, args)
+            }
+            Expression::Grouping(g) => {
                 write!(f, "(group {g})")
             }
             Expression::Literal(l) => write!(f, "{l}"),
@@ -194,4 +215,41 @@ pub enum Statement {
         condition: Expression,
         body: Box<Statement>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Callable {
+    arity_fn: fn(&Callable) -> usize,
+    call_fn: fn(&mut Interpreter, Vec<Literal>) -> Result<Literal, &'static str>,
+    to_string_fn: fn(&Callable) -> &str,
+}
+
+impl Callable {
+    pub fn new(
+        arity: fn(&Callable) -> usize,
+        call: fn(&mut Interpreter, Vec<Literal>) -> Result<Literal, &'static str>,
+        to_string: fn(&Callable) -> &str,
+    ) -> Self {
+        Callable {
+            arity_fn: arity,
+            call_fn: call,
+            to_string_fn: to_string,
+        }
+    }
+
+    pub fn arity(&self) -> usize {
+        (self.arity_fn)(self)
+    }
+
+    pub fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: Vec<Literal>,
+    ) -> Result<Literal, &'static str> {
+        (self.call_fn)(interpreter, arguments)
+    }
+
+    fn to_string(&self) -> &str {
+        (self.to_string_fn)(self)
+    }
 }

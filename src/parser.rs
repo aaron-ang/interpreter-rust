@@ -149,7 +149,7 @@ impl<'a> Parser<'a> {
                     value: Box::new(value),
                 });
             }
-            Err(self.error(self.previous(), "Invalid assignment target."))
+            Err(Parser::error(self.previous(), "Invalid assignment target."))
         } else {
             Ok(expression)
         }
@@ -235,7 +235,43 @@ impl<'a> Parser<'a> {
                 right: Box::new(right),
             });
         }
-        self.primary()
+        self.call()
+    }
+
+    fn call(&mut self) -> Result<Expression, String> {
+        let mut expression = self.primary()?;
+        loop {
+            if self.match_(&[TokenType::LEFT_PAREN]) {
+                expression = self.finish_call(expression)?;
+            } else {
+                break;
+            }
+        }
+        Ok(expression)
+    }
+
+    fn finish_call(&mut self, callee: Expression) -> Result<Expression, String> {
+        let mut arguments = vec![];
+        if !self.check(&TokenType::RIGHT_PAREN) {
+            loop {
+                if arguments.len() >= 255 {
+                    return Err(Parser::error(
+                        self.peek(),
+                        "Cannot have more than 255 arguments.",
+                    ));
+                }
+                arguments.push(self.expression()?);
+                if !self.match_(&[TokenType::COMMA]) {
+                    break;
+                }
+            }
+        }
+        let paren = self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after arguments.")?;
+        Ok(Expression::Call {
+            callee: Box::new(callee),
+            paren: paren.clone(),
+            arguments,
+        })
     }
 
     fn primary(&mut self) -> Result<Expression, String> {
@@ -264,10 +300,10 @@ impl<'a> Parser<'a> {
         if self.match_(&[TokenType::LEFT_PAREN]) {
             let expression = self.expression()?;
             self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after expression.")?;
-            return Ok(Expression::Group(Box::new(expression)));
+            return Ok(Expression::Grouping(Box::new(expression)));
         }
 
-        Err(self.error(self.peek(), "Expect expression."))
+        Err(Parser::error(self.peek(), "Expect expression."))
     }
 
     fn match_(&mut self, token_types: &[TokenType]) -> bool {
@@ -285,7 +321,7 @@ impl<'a> Parser<'a> {
         if self.check(token_type) {
             return Ok(self.advance());
         }
-        Err(self.error(self.peek(), message))
+        Err(Parser::error(self.peek(), message))
     }
 
     fn check(&self, token_type: &TokenType) -> bool {
@@ -311,7 +347,7 @@ impl<'a> Parser<'a> {
         &self.tokens[self.current - 1]
     }
 
-    fn error(&self, token: &Token, message: &str) -> String {
+    pub fn error(token: &Token, message: &str) -> String {
         format!(
             "[line {}] Error at '{}': {}",
             token.line, token.lexeme, message

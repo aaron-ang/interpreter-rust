@@ -1,4 +1,7 @@
-use std::collections::HashMap;
+use std::{
+    collections::HashMap,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
 use crate::grammar::*;
 
@@ -13,11 +16,14 @@ impl Environment {
         }
     }
 
-    fn declare(&mut self, name: String, value: Literal) {
-        self.scopes.last_mut().unwrap().insert(name, value);
+    fn declare(&mut self, name: &str, value: Literal) {
+        self.scopes
+            .last_mut()
+            .unwrap()
+            .insert(name.to_string(), value);
     }
 
-    fn get(&self, name: &String) -> Option<Literal> {
+    fn get(&self, name: &str) -> Option<Literal> {
         for scope in self.scopes.iter().rev() {
             if let Some(val) = scope.get(name) {
                 return Some(val.clone());
@@ -26,10 +32,10 @@ impl Environment {
         None
     }
 
-    fn set(&mut self, name: &String, val: &Literal) -> bool {
+    fn set(&mut self, name: &str, val: &Literal) -> bool {
         for scope in self.scopes.iter_mut().rev() {
             if scope.contains_key(name) {
-                scope.insert(name.clone(), val.clone());
+                scope.insert(name.to_string(), val.clone());
                 return true;
             }
         }
@@ -51,8 +57,21 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
+        let mut globals = Environment::new();
+        globals.declare(
+            "clock",
+            Literal::Callable(Callable::new(
+                |_| 0,
+                |_interpreter: &mut Interpreter, _args: Vec<Literal>| {
+                    let now = SystemTime::now();
+                    let duration = now.duration_since(UNIX_EPOCH).unwrap();
+                    Ok(Literal::Number(duration.as_secs_f64()))
+                },
+                |_| "<native fn>",
+            )),
+        );
         Interpreter {
-            environment: Environment::new(),
+            environment: globals,
         }
     }
 
@@ -92,7 +111,7 @@ impl Interpreter {
                     Some(expr) => self.evaluate(expr)?,
                     None => Literal::Nil,
                 };
-                self.environment.declare(name.lexeme.clone(), value);
+                self.environment.declare(&name.lexeme, value);
             }
             Statement::While { condition, body } => {
                 while self.evaluate(condition)?.is_truthy() {
@@ -147,7 +166,31 @@ impl Interpreter {
                     _ => todo!(),
                 }
             }
-            Expression::Group(expr) => self.evaluate(expr)?,
+            Expression::Call {
+                callee,
+                paren: _,
+                arguments,
+            } => {
+                let callee = self.evaluate(callee)?;
+                let mut args = Vec::new();
+                for arg in arguments.iter() {
+                    args.push(self.evaluate(arg)?);
+                }
+                if let Literal::Callable(callee) = callee {
+                    if args.len() != callee.arity() {
+                        let msg = format!(
+                            "Expected {} arguments but got {}.",
+                            callee.arity(),
+                            args.len()
+                        );
+                        return Err(Box::leak(msg.into_boxed_str()));
+                    }
+                    callee.call(self, args)?
+                } else {
+                    return Err("Can only call functions and classes.");
+                }
+            }
+            Expression::Grouping(expr) => self.evaluate(expr)?,
             Expression::Literal(l) => l.clone(),
             Expression::Logical { left, op, right } => {
                 let left = self.evaluate(left)?;
@@ -166,12 +209,7 @@ impl Interpreter {
             Expression::Unary { op, right } => {
                 let literal = self.evaluate(right)?;
                 match op.token_type {
-                    TokenType::BANG => match literal {
-                        Literal::Boolean(b) => Literal::Boolean(!b),
-                        Literal::Number(n) => Literal::Boolean(n == 0.0),
-                        Literal::String(s) => Literal::Boolean(s.is_empty()),
-                        Literal::Nil => Literal::Boolean(true),
-                    },
+                    TokenType::BANG => Literal::Boolean(!literal.is_truthy()),
                     TokenType::MINUS => match literal {
                         Literal::Number(n) => Literal::Number(-n),
                         _ => return Err("Operand must be a number."),
