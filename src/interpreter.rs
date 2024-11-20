@@ -1,8 +1,11 @@
+use anyhow::{anyhow, Result};
 use std::{
     collections::HashMap,
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use crate::callable::{Callable, LoxCallable};
+use crate::error::RuntimeError;
 use crate::grammar::*;
 
 pub struct Environment {
@@ -57,19 +60,19 @@ pub struct Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
+        let clock_fn = Callable::Native {
+            arity: 0,
+            call: |_, _| {
+                let start = SystemTime::now();
+                let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
+                Ok(Literal::Number(since_the_epoch.as_secs_f64()))
+            },
+            to_string: || String::from("<native fn>"),
+        };
+
         let mut globals = Environment::new();
-        globals.define(
-            "clock",
-            Literal::Callable(Box::new(Callable::Native {
-                arity: 0,
-                call: |_, _| {
-                    let start = SystemTime::now();
-                    let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
-                    Ok(Literal::Number(since_the_epoch.as_secs_f64()))
-                },
-                to_string: || String::from("<native fn>"),
-            })),
-        );
+        globals.define("clock", Literal::Callable(Box::new(clock_fn)));
+
         Interpreter {
             environment: globals,
         }
@@ -81,14 +84,14 @@ impl Interpreter {
         }
     }
 
-    pub fn interpret(&mut self, statements: Vec<Statement>) -> Result<(), &'static str> {
+    pub fn interpret(&mut self, statements: Vec<Statement>) -> Result<()> {
         for statement in statements.iter() {
             self.execute(statement)?;
         }
         Ok(())
     }
 
-    fn execute(&mut self, statement: &Statement) -> Result<(), &'static str> {
+    fn execute(&mut self, statement: &Statement) -> Result<()> {
         match statement {
             Statement::Block(statements) => {
                 self.execute_block(statements)?;
@@ -128,11 +131,18 @@ impl Interpreter {
                 let function = Literal::Callable(Box::new(Callable::Function(f.clone())));
                 self.environment.define(&f.name.lexeme, function);
             }
+            Statement::Return { value } => {
+                let value = match value {
+                    Some(expr) => self.evaluate(expr)?,
+                    None => Literal::Nil,
+                };
+                return Err(RuntimeError::Return(value).into());
+            }
         }
         Ok(())
     }
 
-    pub fn evaluate(&mut self, expr: &Expression) -> Result<Literal, &'static str> {
+    pub fn evaluate(&mut self, expr: &Expression) -> Result<Literal> {
         let literal = match expr {
             Expression::Assign { name, value } => {
                 let value = self.evaluate(value)?;
@@ -145,22 +155,22 @@ impl Interpreter {
                 match op.token_type {
                     TokenType::STAR => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l * r),
-                        _ => return Err("Operands must be numbers."),
+                        _ => return Err(anyhow!("Operands must be numbers.")),
                     },
                     TokenType::SLASH => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l / r),
-                        _ => return Err("Operands must be numbers."),
+                        _ => return Err(anyhow!("Operands must be numbers.")),
                     },
                     TokenType::PLUS => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l + r),
                         (Literal::String(l), Literal::String(r)) => {
                             Literal::String(format!("{}{}", l, r))
                         }
-                        _ => return Err("Operands must be two numbers or two strings."),
+                        _ => return Err(anyhow!("Operands must be numbers or strings.")),
                     },
                     TokenType::MINUS => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l - r),
-                        _ => return Err("Operands must be numbers."),
+                        _ => return Err(anyhow!("Operands must be numbers.")),
                     },
                     TokenType::LESS
                     | TokenType::LESS_EQUAL
@@ -169,7 +179,7 @@ impl Interpreter {
                         (Literal::Number(l), Literal::Number(r)) => {
                             Literal::Boolean(compare_number(&op.token_type, l, r))
                         }
-                        _ => return Err("Operands must be numbers."),
+                        _ => return Err(anyhow!("Operands must be numbers.")),
                     },
                     TokenType::EQUAL_EQUAL => Literal::Boolean(left == right),
                     TokenType::BANG_EQUAL => Literal::Boolean(left != right),
@@ -184,16 +194,15 @@ impl Interpreter {
                 }
                 if let Literal::Callable(callee) = callee {
                     if args.len() != callee.arity() {
-                        let msg = format!(
-                            "Expected {} arguments but got {}.",
-                            callee.arity(),
-                            args.len()
-                        );
-                        return Err(Box::leak(msg.into_boxed_str()));
+                        return Err(RuntimeError::ArgumentCountError {
+                            expected: callee.arity(),
+                            got: args.len(),
+                        }
+                        .into());
                     }
                     callee.call(self, args)?
                 } else {
-                    return Err("Can only call functions and classes.");
+                    return Err(anyhow!("Can only call functions and classes."));
                 }
             }
             Expression::Grouping(expr) => self.evaluate(expr)?,
@@ -218,7 +227,7 @@ impl Interpreter {
                     TokenType::BANG => Literal::Boolean(!literal.is_truthy()),
                     TokenType::MINUS => match literal {
                         Literal::Number(n) => Literal::Number(-n),
-                        _ => return Err("Operand must be a number."),
+                        _ => return Err(anyhow!("Operand must be a number.")),
                     },
                     _ => unreachable!(),
                 }
@@ -228,42 +237,44 @@ impl Interpreter {
         Ok(literal)
     }
 
-    fn execute_block(&mut self, statements: &Vec<Statement>) -> Result<(), &'static str> {
+    fn execute_block(&mut self, statements: &[Statement]) -> Result<()> {
         self.environment.push();
-        for statement in statements.iter() {
-            self.execute(statement)?;
-        }
+        let result = statements.iter().try_for_each(|stmt| self.execute(stmt));
         self.environment.pop();
-        Ok(())
+        result
     }
 
     pub fn execute_block_with_env(
         &mut self,
-        statements: &Vec<Statement>,
+        statements: &[Statement],
         env: Environment,
-    ) -> Result<(), &'static str> {
+    ) -> Result<()> {
         let previous = std::mem::replace(&mut self.environment, env);
-        self.execute_block(statements)?;
+        let result = self.execute_block(statements);
         self.environment = previous;
-        Ok(())
+        result
     }
 
-    fn get_variable(&self, var: &Token) -> Result<Literal, &'static str> {
+    fn get_variable(&self, var: &Token) -> Result<Literal> {
         let lexeme = &var.lexeme;
         match self.environment.get(lexeme) {
             Some(value) => Ok(value.clone()),
-            None => {
-                let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line);
-                Err(Box::leak(msg.into_boxed_str()))
+            None => Err(RuntimeError::UndefinedVariableError {
+                lexeme: lexeme.to_string(),
+                line: var.line,
             }
+            .into()),
         }
     }
 
-    fn assign_variable(&mut self, var: &Token, value: &Literal) -> Result<(), &'static str> {
+    fn assign_variable(&mut self, var: &Token, value: &Literal) -> Result<()> {
         let lexeme = &var.lexeme;
         if !self.environment.set(lexeme, value) {
-            let msg = format!("Undefined variable '{}'.\n[line {}]", lexeme, var.line);
-            return Err(Box::leak(msg.into_boxed_str()));
+            return Err(RuntimeError::UndefinedVariableError {
+                lexeme: lexeme.to_string(),
+                line: var.line,
+            }
+            .into());
         }
         Ok(())
     }

@@ -3,15 +3,7 @@ use std::fs;
 use std::io::{self, Write};
 use std::process::exit;
 
-mod grammar;
-mod interpreter;
-mod parser;
-mod scanner;
-
-use grammar::*;
-use interpreter::Interpreter;
-use parser::Parser;
-use scanner::Scanner;
+use interpreter_starter_rust::*;
 
 fn tokenize(input: &str) {
     let mut scanner = Scanner::new(input);

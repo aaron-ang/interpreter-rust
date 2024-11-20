@@ -1,3 +1,4 @@
+use crate::callable::Function;
 use crate::grammar::*;
 
 pub struct Parser<'a> {
@@ -88,6 +89,8 @@ impl<'a> Parser<'a> {
             let expression = self.expression()?;
             self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
             Ok(Statement::Print(expression))
+        } else if self.match_(&[TokenType::RETURN]) {
+            self.return_statement()
         } else if self.match_(&[TokenType::WHILE]) {
             self.while_statement()
         } else if self.match_(&[TokenType::LEFT_BRACE]) {
@@ -157,6 +160,16 @@ impl<'a> Parser<'a> {
             then_branch,
             else_branch,
         })
+    }
+
+    fn return_statement(&mut self) -> Result<Statement, String> {
+        let value = if !self.check(&TokenType::SEMICOLON) {
+            Some(self.expression()?)
+        } else {
+            None
+        };
+        self.consume(&TokenType::SEMICOLON, "Expect ';' after return value.")?;
+        Ok(Statement::Return { value })
     }
 
     fn while_statement(&mut self) -> Result<Statement, String> {

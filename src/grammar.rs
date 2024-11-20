@@ -1,6 +1,6 @@
 use std::fmt;
 
-use crate::interpreter::Interpreter;
+use crate::callable::{Callable, Function, LoxCallable};
 
 #[derive(Debug, PartialEq, Clone)]
 #[allow(non_camel_case_types)]
@@ -95,10 +95,10 @@ impl fmt::Display for Token {
 
 #[derive(Debug, Clone, PartialEq)]
 pub enum Literal {
+    Nil,
     Boolean(bool),
     String(String),
     Number(f64),
-    Nil,
     Callable(Box<Callable>),
 }
 
@@ -211,71 +211,7 @@ pub enum Statement {
         body: Box<Statement>,
     },
     Function(Function),
-}
-
-pub trait LoxCallable {
-    fn arity(&self) -> usize;
-    fn call(
-        &self,
-        interpreter: &mut Interpreter,
-        arguments: Vec<Literal>,
-    ) -> Result<Literal, &'static str>;
-    fn to_string(&self) -> String;
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Callable {
-    Native {
-        arity: usize,
-        call: fn(&mut Interpreter, Vec<Literal>) -> Result<Literal, &'static str>,
-        to_string: fn() -> String,
+    Return {
+        value: Option<Expression>,
     },
-    Function(Function),
-}
-
-impl LoxCallable for Callable {
-    fn arity(&self) -> usize {
-        match self {
-            Callable::Native { arity, .. } => *arity,
-            Callable::Function(f) => f.params.len(),
-        }
-    }
-
-    fn call(
-        &self,
-        interpreter: &mut Interpreter,
-        arguments: Vec<Literal>,
-    ) -> Result<Literal, &'static str> {
-        match self {
-            Callable::Native { call, .. } => call(interpreter, arguments),
-            Callable::Function(f) => {
-                let mut env = interpreter.globals();
-                for (param, arg) in f.params.iter().zip(arguments) {
-                    env.define(&param.lexeme, arg);
-                }
-                interpreter.execute_block_with_env(&f.body, env)?;
-                Ok(Literal::Nil)
-            }
-        }
-    }
-
-    fn to_string(&self) -> String {
-        match self {
-            Callable::Native { to_string, .. } => to_string(),
-            Callable::Function(f) => format!("<fn {}>", f.name.lexeme),
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Function {
-    pub name: Token,
-    params: Vec<Token>,
-    body: Vec<Statement>,
-}
-
-impl Function {
-    pub fn new(name: Token, params: Vec<Token>, body: Vec<Statement>) -> Self {
-        Self { name, params, body }
-    }
 }
