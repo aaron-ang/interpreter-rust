@@ -194,11 +194,11 @@ impl Interpreter {
                 }
                 if let Literal::Callable(callee) = callee {
                     if args.len() != callee.arity() {
-                        return Err(RuntimeError::ArgumentCountError {
+                        let err = RuntimeError::ArgumentCountError {
                             expected: callee.arity(),
                             got: args.len(),
-                        }
-                        .into());
+                        };
+                        return Err(err.into());
                     }
                     callee.call(self, args)?
                 } else {
@@ -259,22 +259,24 @@ impl Interpreter {
         let lexeme = &var.lexeme;
         match self.environment.get(lexeme) {
             Some(value) => Ok(value.clone()),
-            None => Err(RuntimeError::UndefinedVariableError {
-                lexeme: lexeme.to_string(),
-                line: var.line,
+            None => {
+                let err = RuntimeError::UndefinedVariableError {
+                    lexeme: lexeme.to_string(),
+                    line: var.line,
+                };
+                Err(err.into())
             }
-            .into()),
         }
     }
 
     fn assign_variable(&mut self, var: &Token, value: &Literal) -> Result<()> {
         let lexeme = &var.lexeme;
         if !self.environment.set(lexeme, value) {
-            return Err(RuntimeError::UndefinedVariableError {
+            let err = RuntimeError::UndefinedVariableError {
                 lexeme: lexeme.to_string(),
                 line: var.line,
-            }
-            .into());
+            };
+            return Err(err.into());
         }
         Ok(())
     }

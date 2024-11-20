@@ -1,4 +1,7 @@
+use anyhow::{Error, Result};
+
 use crate::callable::Function;
+use crate::error::RuntimeError;
 use crate::grammar::*;
 
 pub struct Parser<'a> {
@@ -11,7 +14,7 @@ impl<'a> Parser<'a> {
         Parser { tokens, current: 0 }
     }
 
-    pub fn parse(&mut self) -> Result<Vec<Statement>, String> {
+    pub fn parse(&mut self) -> Result<Vec<Statement>> {
         let mut statements = vec![];
         while !self.is_at_end() {
             statements.push(self.declaration()?);
@@ -19,7 +22,7 @@ impl<'a> Parser<'a> {
         Ok(statements)
     }
 
-    fn declaration(&mut self) -> Result<Statement, String> {
+    fn declaration(&mut self) -> Result<Statement> {
         if self.match_(&[TokenType::FUN]) {
             self.function("function")
         } else if self.match_(&[TokenType::VAR]) {
@@ -29,7 +32,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn function(&mut self, kind: &str) -> Result<Statement, String> {
+    fn function(&mut self, kind: &str) -> Result<Statement> {
         let name = self
             .consume(&TokenType::IDENTIFIER, &format!("Expect {} name.", kind))?
             .clone();
@@ -64,7 +67,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Function(Function::new(name, params, body)))
     }
 
-    fn variable(&mut self) -> Result<Statement, String> {
+    fn variable(&mut self) -> Result<Statement> {
         let name = self
             .consume(&TokenType::IDENTIFIER, "Expect variable name.")?
             .clone();
@@ -80,7 +83,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Variable { name, init })
     }
 
-    fn statement(&mut self) -> Result<Statement, String> {
+    fn statement(&mut self) -> Result<Statement> {
         if self.match_(&[TokenType::FOR]) {
             self.for_statement()
         } else if self.match_(&[TokenType::IF]) {
@@ -102,7 +105,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn for_statement(&mut self) -> Result<Statement, String> {
+    fn for_statement(&mut self) -> Result<Statement> {
         self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'for'.")?;
 
         let initializer = if self.match_(&[TokenType::SEMICOLON]) {
@@ -145,7 +148,7 @@ impl<'a> Parser<'a> {
         Ok(body)
     }
 
-    fn if_statement(&mut self) -> Result<Statement, String> {
+    fn if_statement(&mut self) -> Result<Statement> {
         self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'if'.")?;
         let condition = self.expression()?;
         self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after if condition.")?;
@@ -162,7 +165,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn return_statement(&mut self) -> Result<Statement, String> {
+    fn return_statement(&mut self) -> Result<Statement> {
         let value = if !self.check(&TokenType::SEMICOLON) {
             Some(self.expression()?)
         } else {
@@ -172,7 +175,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Return { value })
     }
 
-    fn while_statement(&mut self) -> Result<Statement, String> {
+    fn while_statement(&mut self) -> Result<Statement> {
         self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'while'.")?;
         let condition = self.expression()?;
         self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after condition.")?;
@@ -180,7 +183,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::While { condition, body })
     }
 
-    fn block(&mut self) -> Result<Vec<Statement>, String> {
+    fn block(&mut self) -> Result<Vec<Statement>> {
         let mut statements = vec![];
         while !self.check(&TokenType::RIGHT_BRACE) && !self.is_at_end() {
             statements.push(self.declaration()?);
@@ -189,7 +192,7 @@ impl<'a> Parser<'a> {
         Ok(statements)
     }
 
-    pub fn expression(&mut self) -> Result<Expression, String> {
+    pub fn expression(&mut self) -> Result<Expression> {
         let expression = self.logic_or()?;
         if self.match_(&[TokenType::EQUAL]) {
             let value = self.expression()?;
@@ -205,19 +208,19 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn logic_or(&mut self) -> Result<Expression, String> {
+    fn logic_or(&mut self) -> Result<Expression> {
         self.logical_operation(&[TokenType::OR], Self::logic_and)
     }
 
-    fn logic_and(&mut self) -> Result<Expression, String> {
+    fn logic_and(&mut self) -> Result<Expression> {
         self.logical_operation(&[TokenType::AND], Self::equality)
     }
 
     fn logical_operation(
         &mut self,
         operators: &[TokenType],
-        next_precedence: fn(&mut Self) -> Result<Expression, String>,
-    ) -> Result<Expression, String> {
+        next_precedence: fn(&mut Self) -> Result<Expression>,
+    ) -> Result<Expression> {
         let mut left = next_precedence(self)?;
         while self.match_(operators) {
             let op = self.previous().clone();
@@ -231,14 +234,14 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn equality(&mut self) -> Result<Expression, String> {
+    fn equality(&mut self) -> Result<Expression> {
         self.binary_operation(
             &[TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL],
             Self::comparison,
         )
     }
 
-    fn comparison(&mut self) -> Result<Expression, String> {
+    fn comparison(&mut self) -> Result<Expression> {
         self.binary_operation(
             &[
                 TokenType::GREATER,
@@ -250,19 +253,19 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn term(&mut self) -> Result<Expression, String> {
+    fn term(&mut self) -> Result<Expression> {
         self.binary_operation(&[TokenType::MINUS, TokenType::PLUS], Self::factor)
     }
 
-    fn factor(&mut self) -> Result<Expression, String> {
+    fn factor(&mut self) -> Result<Expression> {
         self.binary_operation(&[TokenType::SLASH, TokenType::STAR], Self::unary)
     }
 
     fn binary_operation(
         &mut self,
         operators: &[TokenType],
-        next_precedence: fn(&mut Self) -> Result<Expression, String>,
-    ) -> Result<Expression, String> {
+        next_precedence: fn(&mut Self) -> Result<Expression>,
+    ) -> Result<Expression> {
         let mut left = next_precedence(self)?;
         while self.match_(operators) {
             let op = self.previous().clone();
@@ -276,7 +279,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn unary(&mut self) -> Result<Expression, String> {
+    fn unary(&mut self) -> Result<Expression> {
         if self.match_(&[TokenType::BANG, TokenType::MINUS]) {
             let op = self.previous().clone();
             let right = self.unary()?;
@@ -288,7 +291,7 @@ impl<'a> Parser<'a> {
         self.call()
     }
 
-    fn call(&mut self) -> Result<Expression, String> {
+    fn call(&mut self) -> Result<Expression> {
         let mut expression = self.primary()?;
         loop {
             if self.match_(&[TokenType::LEFT_PAREN]) {
@@ -300,7 +303,7 @@ impl<'a> Parser<'a> {
         Ok(expression)
     }
 
-    fn finish_call(&mut self, callee: Expression) -> Result<Expression, String> {
+    fn finish_call(&mut self, callee: Expression) -> Result<Expression> {
         let mut arguments = vec![];
         if !self.check(&TokenType::RIGHT_PAREN) {
             loop {
@@ -323,7 +326,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn primary(&mut self) -> Result<Expression, String> {
+    fn primary(&mut self) -> Result<Expression> {
         if self.match_(&[TokenType::FALSE]) {
             return Ok(Expression::Literal(Literal::Boolean(false)));
         }
@@ -366,7 +369,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn consume(&mut self, token_type: &TokenType, message: &str) -> Result<&Token, String> {
+    fn consume(&mut self, token_type: &TokenType, message: &str) -> Result<&Token> {
         if self.check(token_type) {
             return Ok(self.advance());
         }
@@ -396,10 +399,12 @@ impl<'a> Parser<'a> {
         &self.tokens[self.current - 1]
     }
 
-    pub fn error(token: &Token, message: &str) -> String {
-        format!(
-            "[line {}] Error at '{}': {}",
-            token.line, token.lexeme, message
-        )
+    pub fn error(token: &Token, message: &str) -> Error {
+        RuntimeError::ParserError {
+            line: token.line,
+            lexeme: token.lexeme.clone(),
+            message: message.to_string(),
+        }
+        .into()
     }
 }
