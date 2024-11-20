@@ -75,7 +75,7 @@ impl TokenType {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
@@ -99,7 +99,7 @@ pub enum Literal {
     String(String),
     Number(f64),
     Nil,
-    Callable(Callable),
+    Callable(Box<Callable>),
 }
 
 impl Literal {
@@ -131,7 +131,7 @@ impl fmt::Display for Literal {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Assign {
         name: Token,
@@ -144,7 +144,6 @@ pub enum Expression {
     },
     Call {
         callee: Box<Expression>,
-        paren: Token, // to report location of runtime error caused by a function call
         arguments: Vec<Expression>,
     },
     Grouping(Box<Expression>),
@@ -170,11 +169,7 @@ impl fmt::Display for Expression {
             Expression::Binary { left, op, right } => {
                 write!(f, "({} {} {})", op.lexeme, left, right)
             }
-            Expression::Call {
-                callee,
-                paren: _,
-                arguments,
-            } => {
+            Expression::Call { callee, arguments } => {
                 let args = arguments
                     .iter()
                     .map(|arg| arg.to_string())
@@ -197,7 +192,7 @@ impl fmt::Display for Expression {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Statement {
     Block(Vec<Statement>),
     Expression(Expression),
@@ -215,41 +210,72 @@ pub enum Statement {
         condition: Expression,
         body: Box<Statement>,
     },
+    Function(Function),
+}
+
+pub trait LoxCallable {
+    fn arity(&self) -> usize;
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: Vec<Literal>,
+    ) -> Result<Literal, &'static str>;
+    fn to_string(&self) -> String;
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub struct Callable {
-    arity_fn: fn(&Callable) -> usize,
-    call_fn: fn(&mut Interpreter, Vec<Literal>) -> Result<Literal, &'static str>,
-    to_string_fn: fn(&Callable) -> &str,
+pub enum Callable {
+    Native {
+        arity: usize,
+        call: fn(&mut Interpreter, Vec<Literal>) -> Result<Literal, &'static str>,
+        to_string: fn() -> String,
+    },
+    Function(Function),
 }
 
-impl Callable {
-    pub fn new(
-        arity: fn(&Callable) -> usize,
-        call: fn(&mut Interpreter, Vec<Literal>) -> Result<Literal, &'static str>,
-        to_string: fn(&Callable) -> &str,
-    ) -> Self {
-        Callable {
-            arity_fn: arity,
-            call_fn: call,
-            to_string_fn: to_string,
+impl LoxCallable for Callable {
+    fn arity(&self) -> usize {
+        match self {
+            Callable::Native { arity, .. } => *arity,
+            Callable::Function(f) => f.params.len(),
         }
     }
 
-    pub fn arity(&self) -> usize {
-        (self.arity_fn)(self)
-    }
-
-    pub fn call(
+    fn call(
         &self,
         interpreter: &mut Interpreter,
         arguments: Vec<Literal>,
     ) -> Result<Literal, &'static str> {
-        (self.call_fn)(interpreter, arguments)
+        match self {
+            Callable::Native { call, .. } => call(interpreter, arguments),
+            Callable::Function(f) => {
+                let mut env = interpreter.globals();
+                for (param, arg) in f.params.iter().zip(arguments) {
+                    env.define(&param.lexeme, arg);
+                }
+                interpreter.execute_block_with_env(&f.body, env)?;
+                Ok(Literal::Nil)
+            }
+        }
     }
 
-    fn to_string(&self) -> &str {
-        (self.to_string_fn)(self)
+    fn to_string(&self) -> String {
+        match self {
+            Callable::Native { to_string, .. } => to_string(),
+            Callable::Function(f) => format!("<fn {}>", f.name.lexeme),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct Function {
+    pub name: Token,
+    params: Vec<Token>,
+    body: Vec<Statement>,
+}
+
+impl Function {
+    pub fn new(name: Token, params: Vec<Token>, body: Vec<Statement>) -> Self {
+        Self { name, params, body }
     }
 }

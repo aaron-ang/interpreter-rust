@@ -19,11 +19,48 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<Statement, String> {
-        if self.match_(&[TokenType::VAR]) {
+        if self.match_(&[TokenType::FUN]) {
+            self.function("function")
+        } else if self.match_(&[TokenType::VAR]) {
             self.variable()
         } else {
             self.statement()
         }
+    }
+
+    fn function(&mut self, kind: &str) -> Result<Statement, String> {
+        let name = self
+            .consume(&TokenType::IDENTIFIER, &format!("Expect {} name.", kind))?
+            .clone();
+        self.consume(
+            &TokenType::LEFT_PAREN,
+            &format!("Expect '(' after {} name.", kind),
+        )?;
+        let mut params = vec![];
+        if !self.check(&TokenType::RIGHT_PAREN) {
+            loop {
+                if params.len() >= 255 {
+                    return Err(Parser::error(
+                        self.peek(),
+                        "Cannot have more than 255 parameters.",
+                    ));
+                }
+                params.push(
+                    self.consume(&TokenType::IDENTIFIER, "Expect parameter name.")?
+                        .clone(),
+                );
+                if !self.match_(&[TokenType::COMMA]) {
+                    break;
+                }
+            }
+        }
+        self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after parameters.")?;
+        self.consume(
+            &TokenType::LEFT_BRACE,
+            &format!("Expect '{{' before {} body.", kind),
+        )?;
+        let body = self.block()?;
+        Ok(Statement::Function(Function::new(name, params, body)))
     }
 
     fn variable(&mut self) -> Result<Statement, String> {
@@ -266,10 +303,9 @@ impl<'a> Parser<'a> {
                 }
             }
         }
-        let paren = self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after arguments.")?;
+        self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after arguments.")?;
         Ok(Expression::Call {
             callee: Box::new(callee),
-            paren: paren.clone(),
             arguments,
         })
     }

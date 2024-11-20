@@ -16,7 +16,7 @@ impl Environment {
         }
     }
 
-    fn declare(&mut self, name: &str, value: Literal) {
+    pub fn define(&mut self, name: &str, value: Literal) {
         self.scopes
             .last_mut()
             .unwrap()
@@ -58,20 +58,26 @@ pub struct Interpreter {
 impl Interpreter {
     pub fn new() -> Self {
         let mut globals = Environment::new();
-        globals.declare(
+        globals.define(
             "clock",
-            Literal::Callable(Callable::new(
-                |_| 0,
-                |_interpreter: &mut Interpreter, _args: Vec<Literal>| {
-                    let now = SystemTime::now();
-                    let duration = now.duration_since(UNIX_EPOCH).unwrap();
-                    Ok(Literal::Number(duration.as_secs_f64()))
+            Literal::Callable(Box::new(Callable::Native {
+                arity: 0,
+                call: |_, _| {
+                    let start = SystemTime::now();
+                    let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
+                    Ok(Literal::Number(since_the_epoch.as_secs_f64()))
                 },
-                |_| "<native fn>",
-            )),
+                to_string: || String::from("<native fn>"),
+            })),
         );
         Interpreter {
             environment: globals,
+        }
+    }
+
+    pub fn globals(&mut self) -> Environment {
+        Environment {
+            scopes: vec![self.environment.scopes[0].clone()],
         }
     }
 
@@ -111,12 +117,16 @@ impl Interpreter {
                     Some(expr) => self.evaluate(expr)?,
                     None => Literal::Nil,
                 };
-                self.environment.declare(&name.lexeme, value);
+                self.environment.define(&name.lexeme, value);
             }
             Statement::While { condition, body } => {
                 while self.evaluate(condition)?.is_truthy() {
                     self.execute(body)?;
                 }
+            }
+            Statement::Function(f) => {
+                let function = Literal::Callable(Box::new(Callable::Function(f.clone())));
+                self.environment.define(&f.name.lexeme, function);
             }
         }
         Ok(())
@@ -166,14 +176,10 @@ impl Interpreter {
                     _ => todo!(),
                 }
             }
-            Expression::Call {
-                callee,
-                paren: _,
-                arguments,
-            } => {
+            Expression::Call { callee, arguments } => {
                 let callee = self.evaluate(callee)?;
                 let mut args = Vec::new();
-                for arg in arguments.iter() {
+                for arg in arguments {
                     args.push(self.evaluate(arg)?);
                 }
                 if let Literal::Callable(callee) = callee {
@@ -228,6 +234,17 @@ impl Interpreter {
             self.execute(statement)?;
         }
         self.environment.pop();
+        Ok(())
+    }
+
+    pub fn execute_block_with_env(
+        &mut self,
+        statements: &Vec<Statement>,
+        env: Environment,
+    ) -> Result<(), &'static str> {
+        let previous = std::mem::replace(&mut self.environment, env);
+        self.execute_block(statements)?;
+        self.environment = previous;
         Ok(())
     }
 
