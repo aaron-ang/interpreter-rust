@@ -148,15 +148,13 @@ impl Interpreter {
             }
             Expression::Call { callee, arguments } => {
                 let callee = self.evaluate(callee)?;
-
                 let Literal::Callable(callee) = callee else {
                     return Err(self.type_error("Can only call functions and classes."));
                 };
-
-                let mut args = vec![];
-                for arg in arguments {
-                    args.push(self.evaluate(arg)?);
-                }
+                let args = arguments
+                    .iter()
+                    .map(|arg| self.evaluate(arg))
+                    .collect::<Result<Vec<Literal>>>()?;
                 if args.len() != callee.arity() {
                     let err = RuntimeError::ArgumentCountError {
                         expected: callee.arity(),
@@ -204,15 +202,14 @@ impl Interpreter {
         env: Environment,
     ) -> Result<ControlFlow<Literal>> {
         let previous_env = std::mem::replace(&mut self.env, env);
-        let mut result = ControlFlow::Continue(());
         for statement in statements {
             if let ControlFlow::Break(rv) = self.execute(statement)? {
-                result = ControlFlow::Break(rv);
-                break;
+                self.env = previous_env;
+                return Ok(ControlFlow::Break(rv));
             }
         }
         self.env = previous_env;
-        Ok(result)
+        Ok(ControlFlow::Continue(()))
     }
 
     fn type_error(&self, message: &str) -> anyhow::Error {
