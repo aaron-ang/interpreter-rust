@@ -1,61 +1,17 @@
-use anyhow::{anyhow, Result};
+use anyhow::Result;
 use std::{
-    collections::HashMap,
+    ops::ControlFlow,
+    rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::callable::{Callable, LoxCallable};
+use crate::callable::{Callable, Function};
+use crate::environment::Environment;
 use crate::error::RuntimeError;
 use crate::grammar::*;
 
-pub struct Environment {
-    scopes: Vec<HashMap<String, Literal>>,
-}
-
-impl Environment {
-    fn new() -> Self {
-        Environment {
-            scopes: vec![HashMap::new()],
-        }
-    }
-
-    pub fn define(&mut self, name: &str, value: Literal) {
-        self.scopes
-            .last_mut()
-            .unwrap()
-            .insert(name.to_string(), value);
-    }
-
-    fn get(&self, name: &str) -> Option<Literal> {
-        for scope in self.scopes.iter().rev() {
-            if let Some(val) = scope.get(name) {
-                return Some(val.clone());
-            }
-        }
-        None
-    }
-
-    fn set(&mut self, name: &str, val: &Literal) -> bool {
-        for scope in self.scopes.iter_mut().rev() {
-            if scope.contains_key(name) {
-                scope.insert(name.to_string(), val.clone());
-                return true;
-            }
-        }
-        false
-    }
-
-    fn push(&mut self) {
-        self.scopes.push(HashMap::new());
-    }
-
-    fn pop(&mut self) {
-        self.scopes.pop();
-    }
-}
-
 pub struct Interpreter {
-    environment: Environment,
+    pub env: Environment,
 }
 
 impl Interpreter {
@@ -67,38 +23,30 @@ impl Interpreter {
                 let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
                 Ok(Literal::Number(since_the_epoch.as_secs_f64()))
             },
-            to_string: || String::from("<native fn>"),
         };
-
-        let mut globals = Environment::new();
-        globals.define("clock", Literal::Callable(Box::new(clock_fn)));
-
-        Interpreter {
-            environment: globals,
-        }
+        let env = Environment::new();
+        env.define("clock", Literal::Callable(Rc::new(clock_fn)));
+        Interpreter { env }
     }
 
-    pub fn globals(&mut self) -> Environment {
-        Environment {
-            scopes: vec![self.environment.scopes[0].clone()],
-        }
-    }
-
-    pub fn interpret(&mut self, statements: Vec<Statement>) -> Result<()> {
+    pub fn interpret(&mut self, statements: &[Statement]) -> Result<Literal> {
         for statement in statements.iter() {
-            self.execute(statement)?;
+            if let ControlFlow::Break(rv) = self.execute(statement)? {
+                return Ok(rv);
+            }
         }
-        Ok(())
+        Ok(Literal::Nil)
     }
 
-    fn execute(&mut self, statement: &Statement) -> Result<()> {
+    pub fn execute(&mut self, statement: &Statement) -> Result<ControlFlow<Literal>> {
         match statement {
             Statement::Block(statements) => {
-                self.execute_block(statements)?;
+                let env = Environment::new_enclosed(&self.env);
+                self.execute_block(statements, env)
             }
-
             Statement::Expression(expr) => {
                 self.evaluate(expr)?;
+                Ok(ControlFlow::Continue(()))
             }
             Statement::If {
                 condition,
@@ -106,47 +54,59 @@ impl Interpreter {
                 else_branch,
             } => {
                 if self.evaluate(condition)?.is_truthy() {
-                    self.execute(then_branch)?;
+                    self.execute(then_branch)
                 } else if let Some(else_branch) = else_branch {
-                    self.execute(else_branch)?;
+                    self.execute(else_branch)
+                } else {
+                    Ok(ControlFlow::Continue(()))
                 }
             }
-            Statement::Print(expr) => match self.evaluate(expr)? {
-                Literal::Number(n) => println!("{}", n),
-                val => println!("{}", val),
-            },
+            Statement::Print(expr) => {
+                match self.evaluate(expr)? {
+                    Literal::Number(n) => println!("{n}"),
+                    val => println!("{val}"),
+                }
+                Ok(ControlFlow::Continue(()))
+            }
             Statement::Variable { name, init } => {
-                let value = match init {
-                    Some(expr) => self.evaluate(expr)?,
-                    None => Literal::Nil,
+                let value = if let Some(expr) = init {
+                    self.evaluate(expr)?
+                } else {
+                    Literal::Nil
                 };
-                self.environment.define(&name.lexeme, value);
+                self.env.define(&name.lexeme, value);
+                Ok(ControlFlow::Continue(()))
             }
             Statement::While { condition, body } => {
                 while self.evaluate(condition)?.is_truthy() {
-                    self.execute(body)?;
+                    if let ControlFlow::Break(rv) = self.execute(body)? {
+                        return Ok(ControlFlow::Break(rv));
+                    }
                 }
+                Ok(ControlFlow::Continue(()))
             }
-            Statement::Function(f) => {
-                let function = Literal::Callable(Box::new(Callable::Function(f.clone())));
-                self.environment.define(&f.name.lexeme, function);
+            Statement::Function { name, params, body } => {
+                let func = Function::new(name, params, body, &self.env);
+                let func_literal = Literal::Callable(Rc::new(Callable::Function(func)));
+                self.env.define(&name.lexeme, func_literal);
+                Ok(ControlFlow::Continue(()))
             }
             Statement::Return { value } => {
-                let value = match value {
-                    Some(expr) => self.evaluate(expr)?,
-                    None => Literal::Nil,
+                let rv = if let Some(expr) = value {
+                    self.evaluate(expr)?
+                } else {
+                    Literal::Nil
                 };
-                return Err(RuntimeError::Return(value).into());
+                Ok(ControlFlow::Break(rv))
             }
         }
-        Ok(())
     }
 
     pub fn evaluate(&mut self, expr: &Expression) -> Result<Literal> {
         let literal = match expr {
             Expression::Assign { name, value } => {
                 let value = self.evaluate(value)?;
-                self.assign_variable(name, &value)?;
+                self.env.assign(name, &value)?;
                 value
             }
             Expression::Binary { left, op, right } => {
@@ -155,22 +115,22 @@ impl Interpreter {
                 match op.token_type {
                     TokenType::STAR => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l * r),
-                        _ => return Err(anyhow!("Operands must be numbers.")),
+                        _ => return Err(self.type_error("Operands must be numbers.")),
                     },
                     TokenType::SLASH => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l / r),
-                        _ => return Err(anyhow!("Operands must be numbers.")),
+                        _ => return Err(self.type_error("Operands must be numbers.")),
                     },
                     TokenType::PLUS => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l + r),
                         (Literal::String(l), Literal::String(r)) => {
-                            Literal::String(format!("{}{}", l, r))
+                            Literal::String(format!("{l}{r}"))
                         }
-                        _ => return Err(anyhow!("Operands must be numbers or strings.")),
+                        _ => return Err(self.type_error("Operands must be numbers or strings.")),
                     },
                     TokenType::MINUS => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l - r),
-                        _ => return Err(anyhow!("Operands must be numbers.")),
+                        _ => return Err(self.type_error("Operands must be numbers.")),
                     },
                     TokenType::LESS
                     | TokenType::LESS_EQUAL
@@ -179,7 +139,7 @@ impl Interpreter {
                         (Literal::Number(l), Literal::Number(r)) => {
                             Literal::Boolean(compare_number(&op.token_type, l, r))
                         }
-                        _ => return Err(anyhow!("Operands must be numbers.")),
+                        _ => return Err(self.type_error("Operands must be numbers.")),
                     },
                     TokenType::EQUAL_EQUAL => Literal::Boolean(left == right),
                     TokenType::BANG_EQUAL => Literal::Boolean(left != right),
@@ -188,22 +148,23 @@ impl Interpreter {
             }
             Expression::Call { callee, arguments } => {
                 let callee = self.evaluate(callee)?;
-                let mut args = Vec::new();
+
+                let Literal::Callable(callee) = callee else {
+                    return Err(self.type_error("Can only call functions and classes."));
+                };
+
+                let mut args = vec![];
                 for arg in arguments {
                     args.push(self.evaluate(arg)?);
                 }
-                if let Literal::Callable(callee) = callee {
-                    if args.len() != callee.arity() {
-                        let err = RuntimeError::ArgumentCountError {
-                            expected: callee.arity(),
-                            got: args.len(),
-                        };
-                        return Err(err.into());
-                    }
-                    callee.call(self, args)?
-                } else {
-                    return Err(anyhow!("Can only call functions and classes."));
+                if args.len() != callee.arity() {
+                    let err = RuntimeError::ArgumentCountError {
+                        expected: callee.arity(),
+                        got: args.len(),
+                    };
+                    return Err(err.into());
                 }
+                callee.call(self, &args)?
             }
             Expression::Grouping(expr) => self.evaluate(expr)?,
             Expression::Literal(l) => l.clone(),
@@ -227,58 +188,35 @@ impl Interpreter {
                     TokenType::BANG => Literal::Boolean(!literal.is_truthy()),
                     TokenType::MINUS => match literal {
                         Literal::Number(n) => Literal::Number(-n),
-                        _ => return Err(anyhow!("Operand must be a number.")),
+                        _ => return Err(self.type_error("Operand must be a number.")),
                     },
                     _ => unreachable!(),
                 }
             }
-            Expression::Variable(var) => self.get_variable(var)?,
+            Expression::Variable(var) => self.env.get(var)?,
         };
         Ok(literal)
     }
 
-    fn execute_block(&mut self, statements: &[Statement]) -> Result<()> {
-        self.environment.push();
-        let result = statements.iter().try_for_each(|stmt| self.execute(stmt));
-        self.environment.pop();
-        result
-    }
-
-    pub fn execute_block_with_env(
+    pub fn execute_block(
         &mut self,
         statements: &[Statement],
         env: Environment,
-    ) -> Result<()> {
-        let previous = std::mem::replace(&mut self.environment, env);
-        let result = self.execute_block(statements);
-        self.environment = previous;
-        result
-    }
-
-    fn get_variable(&self, var: &Token) -> Result<Literal> {
-        let lexeme = &var.lexeme;
-        match self.environment.get(lexeme) {
-            Some(value) => Ok(value.clone()),
-            None => {
-                let err = RuntimeError::UndefinedVariableError {
-                    lexeme: lexeme.to_string(),
-                    line: var.line,
-                };
-                Err(err.into())
+    ) -> Result<ControlFlow<Literal>> {
+        let previous_env = std::mem::replace(&mut self.env, env);
+        let mut result = ControlFlow::Continue(());
+        for statement in statements {
+            if let ControlFlow::Break(rv) = self.execute(statement)? {
+                result = ControlFlow::Break(rv);
+                break;
             }
         }
+        self.env = previous_env;
+        Ok(result)
     }
 
-    fn assign_variable(&mut self, var: &Token, value: &Literal) -> Result<()> {
-        let lexeme = &var.lexeme;
-        if !self.environment.set(lexeme, value) {
-            let err = RuntimeError::UndefinedVariableError {
-                lexeme: lexeme.to_string(),
-                line: var.line,
-            };
-            return Err(err.into());
-        }
-        Ok(())
+    fn type_error(&self, message: &str) -> anyhow::Error {
+        RuntimeError::TypeError(message.to_string()).into()
     }
 }
 

@@ -1,8 +1,9 @@
 mod callable;
+mod environment;
+mod error;
 mod grammar;
 mod interpreter;
 mod parser;
-mod error;
 mod scanner;
 
 pub use grammar::Literal;
