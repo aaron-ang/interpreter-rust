@@ -1,21 +1,21 @@
 use anyhow::Result;
+use std::{fmt, ops::ControlFlow};
 
-use crate::error::RuntimeError;
+use crate::environment::Environment;
 use crate::grammar::{Literal, Statement, Token};
 use crate::interpreter::Interpreter;
 
-pub trait LoxCallable {
+pub trait LoxCallable: fmt::Debug {
     fn arity(&self) -> usize;
-    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Literal>) -> Result<Literal>;
+    fn call(&self, interpreter: &mut Interpreter, arguments: &[Literal]) -> Result<Literal>;
     fn to_string(&self) -> String;
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Callable {
     Native {
         arity: usize,
-        call: fn(&mut Interpreter, Vec<Literal>) -> Result<Literal>,
-        to_string: fn() -> String,
+        call: fn(&mut Interpreter, &[Literal]) -> Result<Literal>,
     },
     Function(Function),
 }
@@ -28,46 +28,54 @@ impl LoxCallable for Callable {
         }
     }
 
-    fn call(&self, interpreter: &mut Interpreter, arguments: Vec<Literal>) -> Result<Literal> {
+    fn call(&self, interpreter: &mut Interpreter, arguments: &[Literal]) -> Result<Literal> {
         match self {
             Callable::Native { call, .. } => call(interpreter, arguments),
-            Callable::Function(f) => {
-                let mut env = interpreter.globals();
-                for (param, arg) in f.params.iter().zip(arguments) {
-                    env.define(&param.lexeme, arg);
-                }
-                let result = interpreter.execute_block_with_env(&f.body, env);
-                match result {
-                    Err(e) => {
-                        if let Some(RuntimeError::Return(value)) = e.downcast_ref() {
-                            Ok(value.clone())
-                        } else {
-                            Err(e)
-                        }
-                    }
-                    _ => Ok(Literal::Nil),
-                }
-            }
+            Callable::Function(func) => func.execute(interpreter, arguments),
         }
     }
 
     fn to_string(&self) -> String {
         match self {
-            Callable::Native { to_string, .. } => to_string(),
+            Callable::Native { .. } => format!("<native fn>"),
             Callable::Function(f) => format!("<fn {}>", f.name.lexeme),
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub struct Function {
     pub name: Token,
     params: Vec<Token>,
     body: Vec<Statement>,
+    closure: Environment,
 }
 
 impl Function {
-    pub fn new(name: Token, params: Vec<Token>, body: Vec<Statement>) -> Self {
-        Self { name, params, body }
+    pub fn new(
+        name: &Token,
+        params: &Vec<Token>,
+        body: &Vec<Statement>,
+        closure: &Environment,
+    ) -> Self {
+        Self {
+            name: name.clone(),
+            params: params.clone(),
+            body: body.clone(),
+            closure: closure.clone(),
+        }
+    }
+
+    fn execute(&self, interpreter: &mut Interpreter, arguments: &[Literal]) -> Result<Literal> {
+        let env = Environment::new_enclosed(&self.closure);
+        // Bind parameters to arguments
+        for (param, arg) in self.params.iter().zip(arguments) {
+            env.define(&param.lexeme, arg.clone());
+        }
+        // Execute function body in the new environment
+        match interpreter.execute_block(&self.body, env)? {
+            ControlFlow::Break(value) => Ok(value),
+            ControlFlow::Continue(()) => Ok(Literal::Nil),
+        }
     }
 }

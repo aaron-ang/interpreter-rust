@@ -1,6 +1,5 @@
 use anyhow::{Error, Result};
 
-use crate::callable::Function;
 use crate::error::RuntimeError;
 use crate::grammar::*;
 
@@ -34,11 +33,11 @@ impl<'a> Parser<'a> {
 
     fn function(&mut self, kind: &str) -> Result<Statement> {
         let name = self
-            .consume(&TokenType::IDENTIFIER, &format!("Expect {} name.", kind))?
+            .consume(&TokenType::IDENTIFIER, &format!("Expect {kind} name."))?
             .clone();
         self.consume(
             &TokenType::LEFT_PAREN,
-            &format!("Expect '(' after {} name.", kind),
+            &format!("Expect '(' after {kind} name."),
         )?;
         let mut params = vec![];
         if !self.check(&TokenType::RIGHT_PAREN) {
@@ -61,10 +60,10 @@ impl<'a> Parser<'a> {
         self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after parameters.")?;
         self.consume(
             &TokenType::LEFT_BRACE,
-            &format!("Expect '{{' before {} body.", kind),
+            &format!("Expect '{{' before {kind} body."),
         )?;
         let body = self.block()?;
-        Ok(Statement::Function(Function::new(name, params, body)))
+        Ok(Statement::Function { name, params, body })
     }
 
     fn variable(&mut self) -> Result<Statement> {
@@ -327,35 +326,24 @@ impl<'a> Parser<'a> {
     }
 
     fn primary(&mut self) -> Result<Expression> {
-        if self.match_(&[TokenType::FALSE]) {
-            return Ok(Expression::Literal(Literal::Boolean(false)));
-        }
-
-        if self.match_(&[TokenType::TRUE]) {
-            return Ok(Expression::Literal(Literal::Boolean(true)));
-        }
-
-        if self.match_(&[TokenType::NIL]) {
-            return Ok(Expression::Literal(Literal::Nil));
-        }
-
-        if self.match_(&[TokenType::NUMBER, TokenType::STRING]) {
-            return Ok(Expression::Literal(
-                self.previous().literal.as_ref().unwrap().clone(),
-            ));
-        }
-
-        if self.match_(&[TokenType::IDENTIFIER]) {
-            return Ok(Expression::Variable(self.previous().clone()));
-        }
-
-        if self.match_(&[TokenType::LEFT_PAREN]) {
-            let expression = self.expression()?;
+        let expr = if self.match_(&[TokenType::FALSE]) {
+            Expression::Literal(Literal::Boolean(false))
+        } else if self.match_(&[TokenType::TRUE]) {
+            Expression::Literal(Literal::Boolean(true))
+        } else if self.match_(&[TokenType::NIL]) {
+            Expression::Literal(Literal::Nil)
+        } else if self.match_(&[TokenType::NUMBER, TokenType::STRING]) {
+            Expression::Literal(self.previous().literal.clone().unwrap())
+        } else if self.match_(&[TokenType::IDENTIFIER]) {
+            Expression::Variable(self.previous().clone())
+        } else if self.match_(&[TokenType::LEFT_PAREN]) {
+            let expr = self.expression()?;
             self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after expression.")?;
-            return Ok(Expression::Grouping(Box::new(expression)));
-        }
-
-        Err(Parser::error(self.peek(), "Expect expression."))
+            Expression::Grouping(Box::new(expr))
+        } else {
+            return Err(Parser::error(self.peek(), "Expect expression."));
+        };
+        Ok(expr)
     }
 
     fn match_(&mut self, token_types: &[TokenType]) -> bool {

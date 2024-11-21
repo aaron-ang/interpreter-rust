@@ -1,8 +1,8 @@
-use std::fmt;
+use std::{fmt, rc::Rc};
 
-use crate::callable::{Callable, Function, LoxCallable};
+use crate::callable::LoxCallable;
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone, PartialEq, strum::Display)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
     LEFT_PAREN,
@@ -89,17 +89,17 @@ impl fmt::Display for Token {
             Some(value) => value.to_string(),
             None => "null".to_string(),
         };
-        write!(f, "{:?} {} {}", self.token_type, self.lexeme, literal)
+        write!(f, "{} {} {}", self.token_type, self.lexeme, literal)
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Literal {
     Nil,
     Boolean(bool),
     String(String),
     Number(f64),
-    Callable(Box<Callable>),
+    Callable(Rc<dyn LoxCallable>),
 }
 
 impl Literal {
@@ -112,26 +112,41 @@ impl Literal {
     }
 }
 
-impl fmt::Display for Literal {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Literal::Boolean(b) => write!(f, "{b}"),
-            Literal::String(s) => write!(f, "{s}"),
-            Literal::Number(n) => {
-                let int = n.trunc();
-                if int == *n {
-                    write!(f, "{int}.0")
-                } else {
-                    write!(f, "{n}")
-                }
-            }
-            Literal::Nil => write!(f, "nil"),
-            Literal::Callable(c) => write!(f, "{}", c.to_string()),
+impl PartialEq for Literal {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Literal::Nil, Literal::Nil) => true,
+            (Literal::Boolean(a), Literal::Boolean(b)) => a == b,
+            (Literal::String(a), Literal::String(b)) => a == b,
+            (Literal::Number(a), Literal::Number(b)) => a == b,
+            (Literal::Callable(a), Literal::Callable(b)) => Rc::ptr_eq(a, b),
+            _ => false,
         }
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let output = match self {
+            Literal::Boolean(b) => b.to_string(),
+            Literal::String(s) => s.to_string(),
+            Literal::Number(n) => {
+                if n.fract() == 0.0 {
+                    // integer
+                    format!("{:.1}", n)
+                } else {
+                    // float
+                    n.to_string()
+                }
+            }
+            Literal::Nil => "nil".to_string(),
+            Literal::Callable(c) => c.to_string(),
+        };
+        write!(f, "{output}")
+    }
+}
+
+#[derive(Debug, Clone)]
 pub enum Expression {
     Assign {
         name: Token,
@@ -175,7 +190,7 @@ impl fmt::Display for Expression {
                     .map(|arg| arg.to_string())
                     .collect::<Vec<String>>()
                     .join(", ");
-                write!(f, "(call {} {})", callee, args)
+                write!(f, "(call {callee} {args})")
             }
             Expression::Grouping(g) => {
                 write!(f, "(group {g})")
@@ -192,7 +207,7 @@ impl fmt::Display for Expression {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone)]
 pub enum Statement {
     Block(Vec<Statement>),
     Expression(Expression),
@@ -210,7 +225,11 @@ pub enum Statement {
         condition: Expression,
         body: Box<Statement>,
     },
-    Function(Function),
+    Function {
+        name: Token,
+        params: Vec<Token>,
+        body: Vec<Statement>,
+    },
     Return {
         value: Option<Expression>,
     },
