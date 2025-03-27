@@ -80,6 +80,13 @@ fn run(input: &str) {
     };
 
     let mut interpreter = Interpreter::new();
+    let mut resolver = Resolver::new(&mut interpreter);
+
+    if let Err(e) = resolver.resolve(&statements) {
+        eprintln!("{e}");
+        exit(70);
+    }
+
     if let Err(e) = interpreter.interpret(&statements) {
         eprintln!("{e}");
         exit(70);

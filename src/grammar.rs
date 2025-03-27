@@ -1,8 +1,8 @@
-use std::{fmt, rc::Rc};
+use std::{fmt, hash, rc::Rc};
 
 use crate::callable::LoxCallable;
 
-#[derive(Debug, Clone, PartialEq, strum::Display)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, strum::Display)]
 #[allow(non_camel_case_types)]
 pub enum TokenType {
     LEFT_PAREN,
@@ -75,7 +75,7 @@ impl TokenType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
@@ -100,6 +100,21 @@ pub enum Literal {
     String(String),
     Number(f64),
     Callable(Rc<dyn LoxCallable>),
+}
+
+// This is a workaround for the fact that Literal doesn't implement Eq.
+impl Eq for Literal {}
+
+impl hash::Hash for Literal {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        match self {
+            Literal::Nil => 0.hash(state),
+            Literal::Boolean(b) => b.hash(state),
+            Literal::String(s) => s.hash(state),
+            Literal::Number(n) => n.to_bits().hash(state),
+            Literal::Callable(c) => std::ptr::addr_of!(**c).hash(state),
+        }
+    }
 }
 
 impl Literal {
@@ -146,7 +161,7 @@ impl fmt::Display for Literal {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Expression {
     Assign {
         name: Token,
@@ -231,6 +246,7 @@ pub enum Statement {
         body: Vec<Statement>,
     },
     Return {
+        keyword: Token,
         value: Option<Expression>,
     },
 }

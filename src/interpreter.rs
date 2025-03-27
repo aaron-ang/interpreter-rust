@@ -1,5 +1,6 @@
 use anyhow::Result;
 use std::{
+    collections::HashMap,
     ops::ControlFlow,
     rc::Rc,
     time::{SystemTime, UNIX_EPOCH},
@@ -11,7 +12,9 @@ use crate::error::RuntimeError;
 use crate::grammar::*;
 
 pub struct Interpreter {
-    pub env: Environment,
+    globals: Environment,
+    env: Environment,
+    locals: HashMap<Expression, usize>,
 }
 
 impl Interpreter {
@@ -24,9 +27,28 @@ impl Interpreter {
                 Ok(Literal::Number(since_the_epoch.as_secs_f64()))
             },
         };
+
         let env = Environment::new();
         env.define("clock", Literal::Callable(Rc::new(clock_fn)));
-        Interpreter { env }
+
+        Interpreter {
+            globals: env.clone(),
+            env,
+            locals: HashMap::new(),
+        }
+    }
+
+    pub fn resolve(&mut self, expr: &Expression, depth: usize) {
+        println!("Resolving {expr:?} at depth {depth}");
+        self.locals.insert(expr.clone(), depth);
+    }
+
+    pub fn lookup_variable(&mut self, name: &Token, expr: &Expression) -> Result<Literal> {
+        if let Some(depth) = self.locals.get(expr) {
+            self.env.get_at(*depth, &name.lexeme)
+        } else {
+            self.globals.get(name)
+        }
     }
 
     pub fn interpret(&mut self, statements: &[Statement]) -> Result<Literal> {
@@ -91,7 +113,7 @@ impl Interpreter {
                 self.env.define(&name.lexeme, func_literal);
                 Ok(ControlFlow::Continue(()))
             }
-            Statement::Return { value } => {
+            Statement::Return { keyword: _, value } => {
                 let rv = if let Some(expr) = value {
                     self.evaluate(expr)?
                 } else {
@@ -106,7 +128,11 @@ impl Interpreter {
         let literal = match expr {
             Expression::Assign { name, value } => {
                 let value = self.evaluate(value)?;
-                self.env.assign(name, &value)?;
+                if let Some(distance) = self.locals.get(expr) {
+                    self.env.assign_at(*distance, &name.lexeme, &value)?;
+                } else {
+                    self.globals.assign(name, &value)?;
+                }
                 value
             }
             Expression::Binary { left, op, right } => {
@@ -191,7 +217,7 @@ impl Interpreter {
                     _ => unreachable!(),
                 }
             }
-            Expression::Variable(var) => self.env.get(var)?,
+            Expression::Variable(var) => self.lookup_variable(var, expr)?,
         };
         Ok(literal)
     }

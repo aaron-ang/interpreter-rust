@@ -165,13 +165,14 @@ impl<'a> Parser<'a> {
     }
 
     fn return_statement(&mut self) -> Result<Statement> {
+        let keyword = self.previous().clone();
         let value = if !self.check(&TokenType::SEMICOLON) {
             Some(self.expression()?)
         } else {
             None
         };
         self.consume(&TokenType::SEMICOLON, "Expect ';' after return value.")?;
-        Ok(Statement::Return { value })
+        Ok(Statement::Return { keyword, value })
     }
 
     fn while_statement(&mut self) -> Result<Statement> {

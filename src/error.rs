@@ -15,3 +15,13 @@ pub enum RuntimeError {
     #[error("Expected {expected} arguments but got {got}.")]
     ArgumentCountError { expected: usize, got: usize },
 }
+
+#[derive(Error, Debug)]
+pub enum CompileError {
+    #[error("[line {}] Error at '{}': {}", line, lexeme, message)]
+    ResolverError {
+        line: usize,
+        lexeme: String,
+        message: String,
+    },
+}
