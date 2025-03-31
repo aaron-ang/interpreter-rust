@@ -7,10 +7,12 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::error::RuntimeError;
-use crate::grammar::{Literal, Statement, Token};
-use crate::interpreter::Interpreter;
-use crate::{environment::Environment, interpreter::InterpreterResult};
+use crate::{
+    environment::Environment,
+    error::RuntimeError,
+    grammar::{Function, Literal, Statement, Token},
+    interpreter::{Interpreter, InterpreterResult},
+};
 
 pub trait LoxCallable: fmt::Debug {
     fn arity(&self) -> usize;
@@ -31,11 +33,11 @@ pub struct LoxFunction {
 }
 
 impl LoxFunction {
-    pub fn new(name: &Token, params: &[Token], body: &[Statement], closure: &Environment) -> Self {
+    pub fn new(fun: &Function, closure: &Environment) -> Self {
         Self {
-            name: name.clone(),
-            params: params.to_vec(),
-            body: body.to_vec(),
+            name: fun.name.clone(),
+            params: fun.params.to_vec(),
+            body: fun.body.to_vec(),
             closure: closure.clone(),
         }
     }
@@ -117,11 +119,19 @@ impl LoxCallable for Native {
 #[derive(Debug, Clone)]
 pub struct LoxClass {
     pub name: String,
+    methods: HashMap<String, Rc<LoxFunction>>,
 }
 
 impl LoxClass {
-    pub fn new(name: String) -> Self {
-        LoxClass { name }
+    pub fn new(name: String, methods: HashMap<String, Rc<LoxFunction>>) -> Self {
+        LoxClass { name, methods }
+    }
+
+    fn find_method(&self, name: &Token) -> Option<Rc<LoxFunction>> {
+        if let Some(method) = self.methods.get(&name.lexeme) {
+            return Some(method.clone());
+        }
+        None
     }
 }
 
@@ -161,6 +171,10 @@ impl LoxInstance {
     pub fn get(&self, name: &Token) -> InterpreterResult<Literal> {
         if let Some(value) = self.fields.get(&name.lexeme) {
             return Ok(value.clone());
+        }
+
+        if let Some(method) = self.klass.find_method(name) {
+            return Ok(Literal::Function(method));
         }
 
         Err(RuntimeError::UndefinedProperty(name.lexeme.clone()))

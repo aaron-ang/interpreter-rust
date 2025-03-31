@@ -1,10 +1,12 @@
 use anyhow::Result;
 use std::{collections::HashMap, ops::ControlFlow, rc::Rc};
 
-use crate::callable::{LoxClass, LoxFunction, Native};
-use crate::environment::Environment;
-use crate::error::RuntimeError;
-use crate::grammar::*;
+use crate::{
+    callable::{LoxClass, LoxFunction, Native},
+    environment::Environment,
+    error::RuntimeError,
+    grammar::{Expression, Literal, Statement, Token, TokenType},
+};
 
 pub type InterpreterResult<T> = Result<T, RuntimeError>;
 
@@ -47,9 +49,16 @@ impl Interpreter {
                 let env = Environment::new_enclosed(&self.env);
                 self.execute_block(statements, env)
             }
-            Statement::Class { name, .. } => {
+            Statement::Class { name, methods } => {
                 self.env.define(&name.lexeme, Literal::Nil);
-                let klass = LoxClass::new(name.lexeme.clone());
+                let methods: HashMap<String, Rc<LoxFunction>> = methods
+                    .iter()
+                    .map(|method| {
+                        let function = LoxFunction::new(method, &self.env);
+                        (method.name.lexeme.clone(), Rc::new(function))
+                    })
+                    .collect();
+                let klass = LoxClass::new(name.lexeme.clone(), methods);
                 let klass_literal = Literal::Class(Rc::new(klass));
                 self.env.assign(name, &klass_literal)?;
                 Ok(ControlFlow::Continue(()))
@@ -95,10 +104,10 @@ impl Interpreter {
                 }
                 Ok(ControlFlow::Continue(()))
             }
-            Statement::Function { name, params, body } => {
-                let fun = LoxFunction::new(name, params, body, &self.env);
-                let fun_literal = Literal::Function(Rc::new(fun));
-                self.env.define(&name.lexeme, fun_literal);
+            Statement::Function(fun) => {
+                let fun = LoxFunction::new(fun, &self.env);
+                let name = fun.name.lexeme.clone();
+                self.env.define(&name, Literal::Function(Rc::new(fun)));
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Return { value, .. } => {

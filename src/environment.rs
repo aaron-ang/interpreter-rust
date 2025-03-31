@@ -1,8 +1,10 @@
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
-use crate::error::RuntimeError;
-use crate::grammar::{Literal, Token};
-use crate::interpreter::InterpreterResult;
+use crate::{
+    error::RuntimeError,
+    grammar::{Literal, Token},
+    interpreter::InterpreterResult,
+};
 
 /// `Environment` represents a variable scope.
 /// Uses `Rc<RefCell<>>` to allow multiple references to the same environment

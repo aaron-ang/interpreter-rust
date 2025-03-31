@@ -1,7 +1,9 @@
 use anyhow::Result;
 
-use crate::error::RuntimeError;
-use crate::grammar::*;
+use crate::{
+    error::RuntimeError,
+    grammar::{Expression, Function, Literal, Statement, Token, TokenType},
+};
 
 type ParserResult<T> = Result<T, RuntimeError>;
 
@@ -32,7 +34,7 @@ impl<'a> Parser<'a> {
         if self.match_(&[TokenType::CLASS]) {
             self.class_declaration()
         } else if self.match_(&[TokenType::FUN]) {
-            self.function("function")
+            Ok(Statement::Function(self.function("function")?))
         } else if self.match_(&[TokenType::VAR]) {
             self.variable()
         } else {
@@ -53,7 +55,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Class { name, methods })
     }
 
-    fn function(&mut self, kind: &str) -> ParserResult<Statement> {
+    fn function(&mut self, kind: &str) -> ParserResult<Function> {
         let name = self
             .consume(&TokenType::IDENTIFIER, &format!("Expect {kind} name."))?
             .clone();
@@ -85,7 +87,7 @@ impl<'a> Parser<'a> {
             &format!("Expect '{{' before {kind} body."),
         )?;
         let body = self.block()?;
-        Ok(Statement::Function { name, params, body })
+        Ok(Function { name, params, body })
     }
 
     fn variable(&mut self) -> ParserResult<Statement> {

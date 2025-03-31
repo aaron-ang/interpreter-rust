@@ -237,11 +237,18 @@ impl fmt::Display for Expression {
 }
 
 #[derive(Debug, Clone)]
+pub struct Function {
+    pub name: Token,
+    pub params: Vec<Token>,
+    pub body: Vec<Statement>,
+}
+
+#[derive(Debug, Clone)]
 pub enum Statement {
     Block(Vec<Statement>),
     Class {
         name: Token,
-        methods: Vec<Statement>,
+        methods: Vec<Function>,
     },
     Expression(Expression),
     If {
@@ -258,11 +265,7 @@ pub enum Statement {
         condition: Expression,
         body: Box<Statement>,
     },
-    Function {
-        name: Token,
-        params: Vec<Token>,
-        body: Vec<Statement>,
-    },
+    Function(Function),
     Return {
         keyword: Token,
         value: Option<Expression>,

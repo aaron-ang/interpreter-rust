@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 use crate::{
     error::CompileError,
-    grammar::{Expression, Statement, Token},
+    grammar::{Expression, Function, Statement, Token},
     interpreter::Interpreter,
 };
 
@@ -11,6 +11,7 @@ use crate::{
 enum FunctionType {
     None,
     Function,
+    Method,
 }
 
 type ResolverResult<T> = Result<T, CompileError>;
@@ -68,9 +69,12 @@ impl<'a> Resolver<'a> {
                 self.resolve(statements)?;
                 self.end_scope();
             }
-            Statement::Class { name, .. } => {
+            Statement::Class { name, methods } => {
                 self.declare(name)?;
                 self.define(name);
+                for method in methods {
+                    self.resolve_function(method, FunctionType::Method)?;
+                }
             }
             Statement::Variable { name, init } => {
                 self.declare(name)?;
@@ -79,10 +83,10 @@ impl<'a> Resolver<'a> {
                 }
                 self.define(name);
             }
-            Statement::Function { name, params, body } => {
-                self.declare(name)?;
-                self.define(name);
-                self.resolve_function(params, body, FunctionType::Function)?;
+            Statement::Function(fun) => {
+                self.declare(&fun.name)?;
+                self.define(&fun.name);
+                self.resolve_function(fun, FunctionType::Function)?;
             }
             Statement::Expression(expr) => {
                 self.resolve_expression(expr)?;
@@ -174,21 +178,16 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_function(
-        &mut self,
-        params: &[Token],
-        body: &[Statement],
-        fun_ty: FunctionType,
-    ) -> ResolverResult<()> {
+    fn resolve_function(&mut self, fun: &Function, fun_ty: FunctionType) -> ResolverResult<()> {
         let enclosing_fun = self.current_function;
         self.current_function = fun_ty;
 
         self.begin_scope();
-        for param in params {
+        for param in &fun.params {
             self.declare(param)?;
             self.define(param);
         }
-        self.resolve(body)?;
+        self.resolve(&fun.body)?;
         self.end_scope();
 
         self.current_function = enclosing_fun;
