@@ -78,28 +78,43 @@ impl<'a> Resolver<'a> {
                 self.resolve(statements)?;
                 self.end_scope();
             }
-            Statement::Class { name, methods } => {
+            Statement::Class {
+                name,
+                superclass,
+                methods,
+            } => {
                 let enclosing_class = self.current_class;
                 self.current_class = ClassType::Class;
-
                 self.declare(name)?;
                 self.define(name);
 
+                // Handle inheritance
+                if let Some(superclass) = superclass {
+                    if let Expression::Variable { name: sup_name, .. } = superclass {
+                        if name.lexeme == sup_name.lexeme {
+                            return Err(self.error(name, "A class can't inherit from itself."));
+                        }
+                        self.resolve_expression(superclass)?;
+                    }
+                }
+
+                // Set up scope for methods with "this" defined
                 self.begin_scope();
-                self.scopes
-                    .last_mut()
-                    .unwrap()
-                    .insert("this".to_string(), true);
+                if let Some(scope) = self.scopes.last_mut() {
+                    scope.insert("this".to_string(), true);
+                }
+
+                // Resolve each method
                 for method in methods {
-                    let declaration = if method.name.lexeme == "init" {
+                    let function_type = if method.name.lexeme == "init" {
                         FunctionType::Initializer
                     } else {
                         FunctionType::Method
                     };
-                    self.resolve_function(method, declaration)?;
+                    self.resolve_function(method, function_type)?;
                 }
-                self.end_scope();
 
+                self.end_scope();
                 self.current_class = enclosing_class;
             }
             Statement::Variable { name, init } => {

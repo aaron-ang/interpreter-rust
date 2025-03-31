@@ -46,13 +46,29 @@ impl<'a> Parser<'a> {
         let name = self
             .consume(&TokenType::IDENTIFIER, "Expect class name.")?
             .clone();
+
+        let superclass = if self.match_(&[TokenType::LESS]) {
+            self.consume(&TokenType::IDENTIFIER, "Expect superclass name.")?;
+            Some(Expression::Variable {
+                id: self.next_id(),
+                name: self.previous().clone(),
+            })
+        } else {
+            None
+        };
+
         self.consume(&TokenType::LEFT_BRACE, "Expect '{' before class body.")?;
         let mut methods = vec![];
         while !self.check(&TokenType::RIGHT_BRACE) && !self.is_at_end() {
             methods.push(self.function("method")?);
         }
         self.consume(&TokenType::RIGHT_BRACE, "Expect '}' after class body.")?;
-        Ok(Statement::Class { name, methods })
+
+        Ok(Statement::Class {
+            name,
+            superclass,
+            methods,
+        })
     }
 
     fn function(&mut self, kind: &str) -> ParserResult<Function> {

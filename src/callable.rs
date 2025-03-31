@@ -129,12 +129,21 @@ impl LoxCallable for Native {
 #[derive(Debug, Clone)]
 pub struct LoxClass {
     pub name: String,
+    superclass: Option<Rc<LoxClass>>,
     methods: HashMap<String, Rc<LoxFunction>>,
 }
 
 impl LoxClass {
-    pub fn new(name: String, methods: HashMap<String, Rc<LoxFunction>>) -> Self {
-        LoxClass { name, methods }
+    pub fn new(
+        name: String,
+        superclass: Option<Rc<LoxClass>>,
+        methods: HashMap<String, Rc<LoxFunction>>,
+    ) -> Self {
+        LoxClass {
+            name,
+            superclass,
+            methods,
+        }
     }
 
     fn find_method(&self, name: &str) -> Option<Rc<LoxFunction>> {

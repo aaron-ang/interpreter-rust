@@ -49,19 +49,34 @@ impl Interpreter {
                 let env = Environment::new_enclosed(&self.env);
                 self.execute_block(statements, env)
             }
-            Statement::Class { name, methods } => {
+            Statement::Class {
+                name,
+                superclass,
+                methods,
+            } => {
+                let superclass = if let Some(expr) = superclass {
+                    match self.evaluate(expr)? {
+                        Literal::Class(class) => Some(class),
+                        _ => return Err(self.type_error("Superclass must be a class.")),
+                    }
+                } else {
+                    None
+                };
+
                 self.env.define(&name.lexeme, Literal::Nil);
-                let methods: HashMap<String, Rc<LoxFunction>> = methods
+
+                let methods = methods
                     .iter()
                     .map(|method| {
                         let is_initializer = method.name.lexeme == "init";
-                        let function = LoxFunction::new(method, &self.env, is_initializer);
-                        (method.name.lexeme.clone(), Rc::new(function))
+                        let function = Rc::new(LoxFunction::new(method, &self.env, is_initializer));
+                        (method.name.lexeme.clone(), function)
                     })
                     .collect();
-                let klass = LoxClass::new(name.lexeme.clone(), methods);
-                let klass_literal = Literal::Class(Rc::new(klass));
-                self.env.assign(name, &klass_literal)?;
+
+                let class = Rc::new(LoxClass::new(name.lexeme.clone(), superclass, methods));
+                self.env.assign(name, &Literal::Class(class))?;
+
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Expression(expr) => {
