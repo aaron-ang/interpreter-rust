@@ -7,6 +7,8 @@ use crate::{
     interpreter::Interpreter,
 };
 
+type ResolverResult<T> = Result<T, CompileError>;
+
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum FunctionType {
     None,
@@ -14,12 +16,17 @@ enum FunctionType {
     Method,
 }
 
-type ResolverResult<T> = Result<T, CompileError>;
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum ClassType {
+    None,
+    Class,
+}
 
 pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
     current_function: FunctionType,
+    current_class: ClassType,
 }
 
 impl<'a> Resolver<'a> {
@@ -28,6 +35,7 @@ impl<'a> Resolver<'a> {
             interpreter,
             scopes: Vec::new(),
             current_function: FunctionType::None,
+            current_class: ClassType::None,
         }
     }
 
@@ -70,6 +78,9 @@ impl<'a> Resolver<'a> {
                 self.end_scope();
             }
             Statement::Class { name, methods } => {
+                let enclosing_class = self.current_class;
+                self.current_class = ClassType::Class;
+
                 self.declare(name)?;
                 self.define(name);
 
@@ -82,6 +93,8 @@ impl<'a> Resolver<'a> {
                     self.resolve_function(method, FunctionType::Method)?;
                 }
                 self.end_scope();
+
+                self.current_class = enclosing_class;
             }
             Statement::Variable { name, init } => {
                 self.declare(name)?;
@@ -173,6 +186,9 @@ impl<'a> Resolver<'a> {
                 self.resolve_expression(object)?;
             }
             Expression::This { id, keyword } => {
+                if self.current_class == ClassType::None {
+                    return Err(self.error(keyword, "Can't use 'this' outside of a class."));
+                }
                 self.resolve_local(*id, keyword);
             }
         }
