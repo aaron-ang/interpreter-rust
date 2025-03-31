@@ -1,61 +1,25 @@
-use anyhow::Result;
-use std::{fmt, ops::ControlFlow, rc::Rc};
+use std::{
+    cell::RefCell,
+    collections::HashMap,
+    fmt,
+    ops::ControlFlow,
+    rc::Rc,
+    time::{SystemTime, UNIX_EPOCH},
+};
 
-use crate::environment::Environment;
+use crate::error::RuntimeError;
 use crate::grammar::{Literal, Statement, Token};
 use crate::interpreter::Interpreter;
+use crate::{environment::Environment, interpreter::InterpreterResult};
 
 pub trait LoxCallable: fmt::Debug {
     fn arity(&self) -> usize;
-    fn call(&self, interpreter: &mut Interpreter, arguments: &[Literal]) -> Result<Literal>;
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: &[Literal],
+    ) -> InterpreterResult<Literal>;
     fn to_string(&self) -> String;
-}
-
-#[derive(Debug, Clone)]
-pub enum Callable {
-    Native {
-        arity: usize,
-        call: fn(&mut Interpreter, &[Literal]) -> Result<Literal>,
-    },
-    Function(LoxFunction),
-    Class(LoxClass),
-    ClassInstance(LoxInstance),
-}
-
-impl LoxCallable for Callable {
-    fn arity(&self) -> usize {
-        match self {
-            Callable::Native { arity, .. } => *arity,
-            Callable::Function(f) => f.params.len(),
-            Callable::Class(_) => 0,
-            Callable::ClassInstance(_) => 0,
-        }
-    }
-
-    fn call(&self, interpreter: &mut Interpreter, arguments: &[Literal]) -> Result<Literal> {
-        match self {
-            Callable::Native { call, .. } => call(interpreter, arguments),
-            Callable::Function(func) => func.execute(interpreter, arguments),
-            Callable::Class(class) => {
-                let instance = LoxInstance::new(class.clone());
-                Ok(Literal::Callable(Rc::new(Callable::ClassInstance(
-                    instance,
-                ))))
-            }
-            Callable::ClassInstance(instance) => Ok(Literal::Callable(Rc::new(
-                Callable::ClassInstance(instance.clone()),
-            ))),
-        }
-    }
-
-    fn to_string(&self) -> String {
-        match self {
-            Callable::Native { .. } => "<native fn>".to_string(),
-            Callable::Function(f) => format!("<fn {}>", f.name.lexeme),
-            Callable::Class(class) => class.name.to_string(),
-            Callable::ClassInstance(instance) => format!("{} instance", instance.klass.name),
-        }
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -76,7 +40,11 @@ impl LoxFunction {
         }
     }
 
-    fn execute(&self, interpreter: &mut Interpreter, arguments: &[Literal]) -> Result<Literal> {
+    fn execute(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: &[Literal],
+    ) -> InterpreterResult<Literal> {
         let env = Environment::new_enclosed(&self.closure);
         // Bind parameters to arguments
         for (param, arg) in self.params.iter().zip(arguments) {
@@ -87,6 +55,62 @@ impl LoxFunction {
             ControlFlow::Break(value) => Ok(value),
             ControlFlow::Continue(()) => Ok(Literal::Nil),
         }
+    }
+}
+
+impl LoxCallable for LoxFunction {
+    fn arity(&self) -> usize {
+        self.params.len()
+    }
+
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: &[Literal],
+    ) -> InterpreterResult<Literal> {
+        self.execute(interpreter, arguments)
+    }
+
+    fn to_string(&self) -> String {
+        format!("<fn {}>", self.name.lexeme)
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Native {
+    arity: usize,
+    call: fn(&mut Interpreter, &[Literal]) -> InterpreterResult<Literal>,
+}
+
+impl Native {
+    pub fn clock() -> Rc<dyn LoxCallable> {
+        let clock_fn = Self {
+            arity: 0,
+            call: |_, _| {
+                let start = SystemTime::now();
+                let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
+                Ok(Literal::Number(since_the_epoch.as_secs_f64()))
+            },
+        };
+        Rc::new(clock_fn)
+    }
+}
+
+impl LoxCallable for Native {
+    fn arity(&self) -> usize {
+        self.arity
+    }
+
+    fn call(
+        &self,
+        interpreter: &mut Interpreter,
+        arguments: &[Literal],
+    ) -> InterpreterResult<Literal> {
+        (self.call)(interpreter, arguments)
+    }
+
+    fn to_string(&self) -> String {
+        "<native fn>".to_string()
     }
 }
 
@@ -101,13 +125,67 @@ impl LoxClass {
     }
 }
 
+impl LoxCallable for LoxClass {
+    fn arity(&self) -> usize {
+        0
+    }
+
+    fn call(
+        &self,
+        _interpreter: &mut Interpreter,
+        _arguments: &[Literal],
+    ) -> InterpreterResult<Literal> {
+        let instance = LoxInstance::new(self.clone());
+        Ok(Literal::Instance(Rc::new(RefCell::new(instance))))
+    }
+
+    fn to_string(&self) -> String {
+        self.name.clone()
+    }
+}
+
 #[derive(Debug, Clone)]
 pub struct LoxInstance {
     klass: LoxClass,
+    fields: HashMap<String, Literal>,
 }
 
 impl LoxInstance {
-    pub fn new(klass: LoxClass) -> Self {
-        LoxInstance { klass }
+    fn new(klass: LoxClass) -> Self {
+        LoxInstance {
+            klass,
+            fields: HashMap::new(),
+        }
+    }
+
+    pub fn get(&self, name: &Token) -> InterpreterResult<Literal> {
+        if let Some(value) = self.fields.get(&name.lexeme) {
+            return Ok(value.clone());
+        }
+
+        Err(RuntimeError::UndefinedProperty(name.lexeme.clone()))
+    }
+
+    pub fn set(&mut self, name: &Token, value: Literal) {
+        self.fields.insert(name.lexeme.clone(), value);
+    }
+}
+
+impl LoxCallable for LoxInstance {
+    fn arity(&self) -> usize {
+        0
+    }
+
+    fn call(
+        &self,
+        _interpreter: &mut Interpreter,
+        _arguments: &[Literal],
+    ) -> InterpreterResult<Literal> {
+        let err_msg = format!("'{}' object is not callable", self.klass.name);
+        Err(RuntimeError::TypeError(err_msg))
+    }
+
+    fn to_string(&self) -> String {
+        format!("{} instance", self.klass.name)
     }
 }

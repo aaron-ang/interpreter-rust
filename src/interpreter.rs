@@ -1,15 +1,12 @@
 use anyhow::Result;
-use std::{
-    collections::HashMap,
-    ops::ControlFlow,
-    rc::Rc,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{collections::HashMap, ops::ControlFlow, rc::Rc};
 
-use crate::callable::{Callable, LoxClass, LoxFunction};
+use crate::callable::{LoxClass, LoxFunction, Native};
 use crate::environment::Environment;
 use crate::error::RuntimeError;
 use crate::grammar::*;
+
+pub type InterpreterResult<T> = Result<T, RuntimeError>;
 
 pub struct Interpreter {
     globals: Environment,
@@ -25,34 +22,13 @@ impl Default for Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        let clock_fn = Callable::Native {
-            arity: 0,
-            call: |_, _| {
-                let start = SystemTime::now();
-                let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
-                Ok(Literal::Number(since_the_epoch.as_secs_f64()))
-            },
-        };
-
         let env = Environment::new();
-        env.define("clock", Literal::Callable(Rc::new(clock_fn)));
+        env.define("clock", Literal::Function(Native::clock()));
 
         Interpreter {
             globals: env.clone(),
             env,
             locals: HashMap::new(),
-        }
-    }
-
-    pub fn resolve(&mut self, exp_id: usize, depth: usize) {
-        self.locals.insert(exp_id, depth);
-    }
-
-    pub fn lookup_variable(&mut self, name: &Token, exp_id: &usize) -> Result<Literal> {
-        if let Some(depth) = self.locals.get(exp_id) {
-            self.env.get_at(*depth, &name.lexeme)
-        } else {
-            self.globals.get(name)
         }
     }
 
@@ -65,16 +41,16 @@ impl Interpreter {
         Ok(Literal::Nil)
     }
 
-    pub fn execute(&mut self, statement: &Statement) -> Result<ControlFlow<Literal>> {
+    pub fn execute(&mut self, statement: &Statement) -> InterpreterResult<ControlFlow<Literal>> {
         match statement {
             Statement::Block(statements) => {
                 let env = Environment::new_enclosed(&self.env);
                 self.execute_block(statements, env)
             }
-            Statement::Class { name, methods: _ } => {
+            Statement::Class { name, .. } => {
                 self.env.define(&name.lexeme, Literal::Nil);
                 let klass = LoxClass::new(name.lexeme.clone());
-                let klass_literal = Literal::Callable(Rc::new(Callable::Class(klass)));
+                let klass_literal = Literal::Class(Rc::new(klass));
                 self.env.assign(name, &klass_literal)?;
                 Ok(ControlFlow::Continue(()))
             }
@@ -121,11 +97,11 @@ impl Interpreter {
             }
             Statement::Function { name, params, body } => {
                 let fun = LoxFunction::new(name, params, body, &self.env);
-                let fun_literal = Literal::Callable(Rc::new(Callable::Function(fun)));
+                let fun_literal = Literal::Function(Rc::new(fun));
                 self.env.define(&name.lexeme, fun_literal);
                 Ok(ControlFlow::Continue(()))
             }
-            Statement::Return { keyword: _, value } => {
+            Statement::Return { value, .. } => {
                 let rv = if let Some(expr) = value {
                     self.evaluate(expr)?
                 } else {
@@ -136,7 +112,7 @@ impl Interpreter {
         }
     }
 
-    pub fn evaluate(&mut self, expr: &Expression) -> Result<Literal> {
+    pub fn evaluate(&mut self, expr: &Expression) -> InterpreterResult<Literal> {
         let literal = match expr {
             Expression::Assign { id, name, value } => {
                 let value = self.evaluate(value)?;
@@ -181,24 +157,25 @@ impl Interpreter {
                     },
                     TokenType::EQUAL_EQUAL => Literal::Boolean(left == right),
                     TokenType::BANG_EQUAL => Literal::Boolean(left != right),
-                    _ => todo!(),
+                    _ => unimplemented!(),
                 }
             }
             Expression::Call { callee, arguments } => {
                 let callee = self.evaluate(callee)?;
-                let Literal::Callable(callee) = callee else {
-                    return Err(self.type_error("Can only call functions and classes."));
-                };
                 let args = arguments
                     .iter()
                     .map(|arg| self.evaluate(arg))
-                    .collect::<Result<Vec<Literal>>>()?;
+                    .collect::<InterpreterResult<Vec<_>>>()?;
+                let callee = match callee {
+                    Literal::Function(fun) => fun,
+                    Literal::Class(klass) => klass,
+                    _ => return Err(self.type_error("Can only call functions and classes.")),
+                };
                 if args.len() != callee.arity() {
-                    let err = RuntimeError::ArgumentCountError {
+                    return Err(RuntimeError::ArgumentCountError {
                         expected: callee.arity(),
                         got: args.len(),
-                    };
-                    return Err(err.into());
+                    });
                 }
                 callee.call(self, &args)?
             }
@@ -230,6 +207,28 @@ impl Interpreter {
                 }
             }
             Expression::Variable { id, name } => self.lookup_variable(name, id)?,
+            Expression::Get { object, name } => {
+                let object = self.evaluate(object)?;
+                match object {
+                    Literal::Instance(instance) => instance.borrow().get(name)?,
+                    _ => return Err(self.type_error("Only instances have fields.")),
+                }
+            }
+            Expression::Set {
+                object,
+                name,
+                value,
+            } => {
+                let object = self.evaluate(object)?;
+                match object {
+                    Literal::Instance(instance) => {
+                        let value = self.evaluate(value)?;
+                        instance.borrow_mut().set(name, value.clone());
+                        return Ok(value);
+                    }
+                    _ => return Err(self.type_error("Only instances have fields.")),
+                }
+            }
         };
         Ok(literal)
     }
@@ -238,7 +237,7 @@ impl Interpreter {
         &mut self,
         statements: &[Statement],
         env: Environment,
-    ) -> Result<ControlFlow<Literal>> {
+    ) -> InterpreterResult<ControlFlow<Literal>> {
         let previous_env = std::mem::replace(&mut self.env, env);
         for statement in statements {
             if let ControlFlow::Break(rv) = self.execute(statement)? {
@@ -250,8 +249,20 @@ impl Interpreter {
         Ok(ControlFlow::Continue(()))
     }
 
-    fn type_error(&self, message: &str) -> anyhow::Error {
-        RuntimeError::TypeError(message.to_string()).into()
+    pub fn resolve(&mut self, exp_id: usize, depth: usize) {
+        self.locals.insert(exp_id, depth);
+    }
+
+    fn lookup_variable(&mut self, name: &Token, exp_id: &usize) -> InterpreterResult<Literal> {
+        if let Some(depth) = self.locals.get(exp_id) {
+            self.env.get_at(*depth, &name.lexeme)
+        } else {
+            self.globals.get(name)
+        }
+    }
+
+    fn type_error(&self, message: &str) -> RuntimeError {
+        RuntimeError::TypeError(message.to_string())
     }
 }
 

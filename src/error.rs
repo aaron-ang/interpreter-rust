@@ -12,6 +12,8 @@ pub enum RuntimeError {
     TypeError(String),
     #[error("Undefined variable '{lexeme}'.\n[line {line}]")]
     UndefinedVariable { lexeme: String, line: usize },
+    #[error("Undefined property '{0}'.")]
+    UndefinedProperty(String),
     #[error("Expected {expected} arguments but got {got}.")]
     ArgumentCountError { expected: usize, got: usize },
 }

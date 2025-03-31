@@ -1,8 +1,8 @@
-use anyhow::Result;
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 use crate::error::RuntimeError;
 use crate::grammar::{Literal, Token};
+use crate::interpreter::InterpreterResult;
 
 /// `Environment` represents a variable scope.
 /// Uses `Rc<RefCell<>>` to allow multiple references to the same environment
@@ -37,19 +37,19 @@ impl Environment {
         self.inner.borrow_mut().define(name, value);
     }
 
-    pub fn get(&self, token: &Token) -> Result<Literal> {
+    pub fn get(&self, token: &Token) -> InterpreterResult<Literal> {
         self.inner.borrow().get(token)
     }
 
-    pub fn assign(&self, token: &Token, value: &Literal) -> Result<()> {
+    pub fn assign(&self, token: &Token, value: &Literal) -> InterpreterResult<()> {
         self.inner.borrow_mut().assign(token, value)
     }
 
-    pub fn get_at(&self, distance: usize, name: &str) -> Result<Literal> {
+    pub fn get_at(&self, distance: usize, name: &str) -> InterpreterResult<Literal> {
         self.ancestor(distance).inner.borrow().get_from_local(name)
     }
 
-    pub fn assign_at(&self, distance: usize, name: &str, value: &Literal) -> Result<()> {
+    pub fn assign_at(&self, distance: usize, name: &str, value: &Literal) -> InterpreterResult<()> {
         self.ancestor(distance)
             .inner
             .borrow_mut()
@@ -99,7 +99,7 @@ impl EnvironmentImpl {
         self.values.insert(name.to_string(), value);
     }
 
-    fn get(&self, token: &Token) -> Result<Literal> {
+    fn get(&self, token: &Token) -> InterpreterResult<Literal> {
         if let Some(value) = self.values.get(&token.lexeme) {
             return Ok(value.clone());
         }
@@ -111,15 +111,14 @@ impl EnvironmentImpl {
         Err(RuntimeError::UndefinedVariable {
             lexeme: token.lexeme.clone(),
             line: token.line,
-        }
-        .into())
+        })
     }
 
-    fn get_from_local(&self, name: &str) -> Result<Literal> {
+    fn get_from_local(&self, name: &str) -> InterpreterResult<Literal> {
         Ok(self.values.get(name).cloned().unwrap_or(Literal::Nil))
     }
 
-    fn assign(&mut self, token: &Token, value: &Literal) -> Result<()> {
+    fn assign(&mut self, token: &Token, value: &Literal) -> InterpreterResult<()> {
         if self.values.contains_key(&token.lexeme) {
             self.assign_to_local(&token.lexeme, value);
             return Ok(());
@@ -132,8 +131,7 @@ impl EnvironmentImpl {
         Err(RuntimeError::UndefinedVariable {
             lexeme: token.lexeme.clone(),
             line: token.line,
-        }
-        .into())
+        })
     }
 
     fn assign_to_local(&mut self, name: &str, value: &Literal) {

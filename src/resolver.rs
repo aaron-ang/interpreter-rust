@@ -13,6 +13,8 @@ enum FunctionType {
     Function,
 }
 
+type ResolverResult<T> = Result<T, CompileError>;
+
 pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
@@ -36,7 +38,7 @@ impl<'a> Resolver<'a> {
         self.scopes.pop();
     }
 
-    fn declare(&mut self, name: &Token) -> Result<()> {
+    fn declare(&mut self, name: &Token) -> ResolverResult<()> {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&name.lexeme) {
                 return Err(self.error(name, "Already a variable with this name in this scope."));
@@ -52,21 +54,21 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    pub fn resolve(&mut self, statements: &[Statement]) -> Result<()> {
+    pub fn resolve(&mut self, statements: &[Statement]) -> ResolverResult<()> {
         for statement in statements {
             self.resolve_statement(statement)?;
         }
         Ok(())
     }
 
-    fn resolve_statement(&mut self, statement: &Statement) -> Result<()> {
+    fn resolve_statement(&mut self, statement: &Statement) -> ResolverResult<()> {
         match statement {
             Statement::Block(statements) => {
                 self.begin_scope();
                 self.resolve(statements)?;
                 self.end_scope();
             }
-            Statement::Class { name, methods: _ } => {
+            Statement::Class { name, .. } => {
                 self.declare(name)?;
                 self.define(name);
             }
@@ -115,7 +117,7 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    fn resolve_expression(&mut self, expr: &Expression) -> Result<()> {
+    fn resolve_expression(&mut self, expr: &Expression) -> ResolverResult<()> {
         match expr {
             Expression::Variable { id, name } => {
                 if let Some(scope) = self.scopes.last() {
@@ -131,7 +133,7 @@ impl<'a> Resolver<'a> {
                 self.resolve_expression(value)?;
                 self.resolve_local(*id, name);
             }
-            Expression::Binary { left, op: _, right } => {
+            Expression::Binary { left, right, .. } => {
                 self.resolve_expression(left)?;
                 self.resolve_expression(right)?;
             }
@@ -145,12 +147,19 @@ impl<'a> Resolver<'a> {
                 self.resolve_expression(expr)?;
             }
             Expression::Literal(_) => {}
-            Expression::Logical { left, op: _, right } => {
+            Expression::Logical { left, right, .. } => {
                 self.resolve_expression(left)?;
                 self.resolve_expression(right)?;
             }
-            Expression::Unary { op: _, right } => {
+            Expression::Unary { right, .. } => {
                 self.resolve_expression(right)?;
+            }
+            Expression::Get { object, .. } => {
+                self.resolve_expression(object)?;
+            }
+            Expression::Set { object, value, .. } => {
+                self.resolve_expression(value)?;
+                self.resolve_expression(object)?;
             }
         }
         Ok(())
@@ -170,7 +179,7 @@ impl<'a> Resolver<'a> {
         params: &[Token],
         body: &[Statement],
         fun_ty: FunctionType,
-    ) -> Result<()> {
+    ) -> ResolverResult<()> {
         let enclosing_fun = self.current_function;
         self.current_function = fun_ty;
 
@@ -186,12 +195,11 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    fn error(&self, token: &Token, message: &str) -> anyhow::Error {
+    fn error(&self, token: &Token, message: &str) -> CompileError {
         CompileError::ResolverError {
             line: token.line,
             lexeme: token.lexeme.clone(),
             message: message.to_string(),
         }
-        .into()
     }
 }

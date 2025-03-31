@@ -1,7 +1,9 @@
-use anyhow::{Error, Result};
+use anyhow::Result;
 
 use crate::error::RuntimeError;
 use crate::grammar::*;
+
+type ParserResult<T> = Result<T, RuntimeError>;
 
 pub struct Parser<'a> {
     tokens: &'a [Token],
@@ -26,7 +28,7 @@ impl<'a> Parser<'a> {
         Ok(statements)
     }
 
-    fn declaration(&mut self) -> Result<Statement> {
+    fn declaration(&mut self) -> ParserResult<Statement> {
         if self.match_(&[TokenType::CLASS]) {
             self.class_declaration()
         } else if self.match_(&[TokenType::FUN]) {
@@ -38,7 +40,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn class_declaration(&mut self) -> Result<Statement> {
+    fn class_declaration(&mut self) -> ParserResult<Statement> {
         let name = self
             .consume(&TokenType::IDENTIFIER, "Expect class name.")?
             .clone();
@@ -51,7 +53,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Class { name, methods })
     }
 
-    fn function(&mut self, kind: &str) -> Result<Statement> {
+    fn function(&mut self, kind: &str) -> ParserResult<Statement> {
         let name = self
             .consume(&TokenType::IDENTIFIER, &format!("Expect {kind} name."))?
             .clone();
@@ -86,7 +88,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Function { name, params, body })
     }
 
-    fn variable(&mut self) -> Result<Statement> {
+    fn variable(&mut self) -> ParserResult<Statement> {
         let name = self
             .consume(&TokenType::IDENTIFIER, "Expect variable name.")?
             .clone();
@@ -102,7 +104,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Variable { name, init })
     }
 
-    fn statement(&mut self) -> Result<Statement> {
+    fn statement(&mut self) -> ParserResult<Statement> {
         if self.match_(&[TokenType::FOR]) {
             self.for_statement()
         } else if self.match_(&[TokenType::IF]) {
@@ -124,7 +126,7 @@ impl<'a> Parser<'a> {
         }
     }
 
-    fn for_statement(&mut self) -> Result<Statement> {
+    fn for_statement(&mut self) -> ParserResult<Statement> {
         // Consume the opening parenthesis
         self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'for'.")?;
 
@@ -176,7 +178,7 @@ impl<'a> Parser<'a> {
         Ok(body)
     }
 
-    fn if_statement(&mut self) -> Result<Statement> {
+    fn if_statement(&mut self) -> ParserResult<Statement> {
         self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'if'.")?;
         let condition = self.expression()?;
         self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after if condition.")?;
@@ -193,7 +195,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn return_statement(&mut self) -> Result<Statement> {
+    fn return_statement(&mut self) -> ParserResult<Statement> {
         let keyword = self.previous().clone();
         let value = if !self.check(&TokenType::SEMICOLON) {
             Some(self.expression()?)
@@ -204,7 +206,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::Return { keyword, value })
     }
 
-    fn while_statement(&mut self) -> Result<Statement> {
+    fn while_statement(&mut self) -> ParserResult<Statement> {
         self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'while'.")?;
         let condition = self.expression()?;
         self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after condition.")?;
@@ -212,7 +214,7 @@ impl<'a> Parser<'a> {
         Ok(Statement::While { condition, body })
     }
 
-    fn block(&mut self) -> Result<Vec<Statement>> {
+    fn block(&mut self) -> ParserResult<Vec<Statement>> {
         let mut statements = vec![];
         while !self.check(&TokenType::RIGHT_BRACE) && !self.is_at_end() {
             statements.push(self.declaration()?);
@@ -221,36 +223,41 @@ impl<'a> Parser<'a> {
         Ok(statements)
     }
 
-    pub fn expression(&mut self) -> Result<Expression> {
-        let expression = self.logic_or()?;
-        if self.match_(&[TokenType::EQUAL]) {
-            let value = self.expression()?;
-            if let Expression::Variable { id: _, name } = expression {
-                return Ok(Expression::Assign {
-                    id: self.next_id(),
-                    name,
-                    value: Box::new(value),
-                });
-            }
-            Err(Parser::error(self.previous(), "Invalid assignment target."))
-        } else {
-            Ok(expression)
+    pub fn expression(&mut self) -> ParserResult<Expression> {
+        let expr = self.logic_or()?;
+        if !self.match_(&[TokenType::EQUAL]) {
+            return Ok(expr);
+        }
+
+        let value = self.expression()?;
+        match expr {
+            Expression::Variable { name, .. } => Ok(Expression::Assign {
+                id: self.next_id(),
+                name,
+                value: Box::new(value),
+            }),
+            Expression::Get { object, name } => Ok(Expression::Set {
+                object,
+                name,
+                value: Box::new(value),
+            }),
+            _ => Err(Parser::error(self.previous(), "Invalid assignment target.")),
         }
     }
 
-    fn logic_or(&mut self) -> Result<Expression> {
+    fn logic_or(&mut self) -> ParserResult<Expression> {
         self.logical_operation(&[TokenType::OR], Self::logic_and)
     }
 
-    fn logic_and(&mut self) -> Result<Expression> {
+    fn logic_and(&mut self) -> ParserResult<Expression> {
         self.logical_operation(&[TokenType::AND], Self::equality)
     }
 
     fn logical_operation(
         &mut self,
         operators: &[TokenType],
-        next_precedence: fn(&mut Self) -> Result<Expression>,
-    ) -> Result<Expression> {
+        next_precedence: fn(&mut Self) -> ParserResult<Expression>,
+    ) -> ParserResult<Expression> {
         let mut left = next_precedence(self)?;
         while self.match_(operators) {
             let op = self.previous().clone();
@@ -264,14 +271,14 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn equality(&mut self) -> Result<Expression> {
+    fn equality(&mut self) -> ParserResult<Expression> {
         self.binary_operation(
             &[TokenType::BANG_EQUAL, TokenType::EQUAL_EQUAL],
             Self::comparison,
         )
     }
 
-    fn comparison(&mut self) -> Result<Expression> {
+    fn comparison(&mut self) -> ParserResult<Expression> {
         self.binary_operation(
             &[
                 TokenType::GREATER,
@@ -283,19 +290,19 @@ impl<'a> Parser<'a> {
         )
     }
 
-    fn term(&mut self) -> Result<Expression> {
+    fn term(&mut self) -> ParserResult<Expression> {
         self.binary_operation(&[TokenType::MINUS, TokenType::PLUS], Self::factor)
     }
 
-    fn factor(&mut self) -> Result<Expression> {
+    fn factor(&mut self) -> ParserResult<Expression> {
         self.binary_operation(&[TokenType::SLASH, TokenType::STAR], Self::unary)
     }
 
     fn binary_operation(
         &mut self,
         operators: &[TokenType],
-        next_precedence: fn(&mut Self) -> Result<Expression>,
-    ) -> Result<Expression> {
+        next_precedence: fn(&mut Self) -> ParserResult<Expression>,
+    ) -> ParserResult<Expression> {
         let mut left = next_precedence(self)?;
         while self.match_(operators) {
             let op = self.previous().clone();
@@ -309,7 +316,7 @@ impl<'a> Parser<'a> {
         Ok(left)
     }
 
-    fn unary(&mut self) -> Result<Expression> {
+    fn unary(&mut self) -> ParserResult<Expression> {
         if self.match_(&[TokenType::BANG, TokenType::MINUS]) {
             let op = self.previous().clone();
             let right = self.unary()?;
@@ -321,11 +328,19 @@ impl<'a> Parser<'a> {
         self.call()
     }
 
-    fn call(&mut self) -> Result<Expression> {
+    fn call(&mut self) -> ParserResult<Expression> {
         let mut expression = self.primary()?;
         loop {
             if self.match_(&[TokenType::LEFT_PAREN]) {
                 expression = self.finish_call(expression)?;
+            } else if self.match_(&[TokenType::DOT]) {
+                let name = self
+                    .consume(&TokenType::IDENTIFIER, "Expect property name after '.'")?
+                    .clone();
+                expression = Expression::Get {
+                    object: Box::new(expression),
+                    name,
+                };
             } else {
                 break;
             }
@@ -333,7 +348,7 @@ impl<'a> Parser<'a> {
         Ok(expression)
     }
 
-    fn finish_call(&mut self, callee: Expression) -> Result<Expression> {
+    fn finish_call(&mut self, callee: Expression) -> ParserResult<Expression> {
         let mut arguments = vec![];
         if !self.check(&TokenType::RIGHT_PAREN) {
             loop {
@@ -356,7 +371,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn primary(&mut self) -> Result<Expression> {
+    fn primary(&mut self) -> ParserResult<Expression> {
         let expr = if self.match_(&[TokenType::FALSE]) {
             Expression::Literal(Literal::Boolean(false))
         } else if self.match_(&[TokenType::TRUE]) {
@@ -391,7 +406,7 @@ impl<'a> Parser<'a> {
         })
     }
 
-    fn consume(&mut self, token_type: &TokenType, message: &str) -> Result<&Token> {
+    fn consume(&mut self, token_type: &TokenType, message: &str) -> ParserResult<&Token> {
         if self.check(token_type) {
             return Ok(self.advance());
         }
@@ -427,12 +442,11 @@ impl<'a> Parser<'a> {
         id
     }
 
-    pub fn error(token: &Token, message: &str) -> Error {
+    pub fn error(token: &Token, message: &str) -> RuntimeError {
         RuntimeError::ParserError {
             line: token.line,
             lexeme: token.lexeme.clone(),
             message: message.to_string(),
         }
-        .into()
     }
 }

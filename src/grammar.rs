@@ -1,6 +1,6 @@
-use std::{fmt, rc::Rc};
+use std::{cell::RefCell, fmt, rc::Rc};
 
-use crate::callable::LoxCallable;
+use crate::callable::{LoxCallable, LoxClass, LoxInstance};
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, strum::Display)]
 #[allow(non_camel_case_types, clippy::upper_case_acronyms)]
@@ -99,7 +99,9 @@ pub enum Literal {
     Boolean(bool),
     String(String),
     Number(f64),
-    Callable(Rc<dyn LoxCallable>),
+    Function(Rc<dyn LoxCallable>),
+    Class(Rc<LoxClass>),
+    Instance(Rc<RefCell<LoxInstance>>),
 }
 
 impl Literal {
@@ -119,7 +121,9 @@ impl PartialEq for Literal {
             (Literal::Boolean(a), Literal::Boolean(b)) => a == b,
             (Literal::String(a), Literal::String(b)) => a == b,
             (Literal::Number(a), Literal::Number(b)) => a == b,
-            (Literal::Callable(a), Literal::Callable(b)) => Rc::ptr_eq(a, b),
+            (Literal::Function(a), Literal::Function(b)) => Rc::ptr_eq(a, b),
+            (Literal::Class(a), Literal::Class(b)) => Rc::ptr_eq(a, b),
+            (Literal::Instance(a), Literal::Instance(b)) => Rc::ptr_eq(a, b),
             _ => false,
         }
     }
@@ -140,7 +144,9 @@ impl fmt::Display for Literal {
                 }
             }
             Literal::Nil => "nil".to_string(),
-            Literal::Callable(c) => c.to_string(),
+            Literal::Function(c) => c.to_string(),
+            Literal::Class(c) => c.to_string(),
+            Literal::Instance(c) => c.borrow().to_string(),
         };
         write!(f, "{output}")
     }
@@ -169,6 +175,11 @@ pub enum Expression {
         op: Token,
         right: Box<Expression>,
     },
+    Set {
+        object: Box<Expression>,
+        name: Token,
+        value: Box<Expression>,
+    },
     Unary {
         op: Token,
         right: Box<Expression>,
@@ -177,12 +188,16 @@ pub enum Expression {
         id: usize,
         name: Token,
     },
+    Get {
+        object: Box<Expression>,
+        name: Token,
+    },
 }
 
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expression::Assign { id: _, name, value } => {
+            Expression::Assign { name, value, .. } => {
                 write!(f, "(assign {} {})", name.lexeme, value)
             }
             Expression::Binary { left, op, right } => {
@@ -203,10 +218,20 @@ impl fmt::Display for Expression {
             Expression::Logical { left, op, right } => {
                 write!(f, "({} {} {})", op.lexeme, left, right)
             }
+            Expression::Set {
+                object,
+                name,
+                value,
+            } => {
+                write!(f, "(set {} {} {})", object, name.lexeme, value)
+            }
             Expression::Unary { op, right } => {
                 write!(f, "({} {})", op.lexeme, right)
             }
-            Expression::Variable { id: _, name } => write!(f, "(var {})", name.lexeme),
+            Expression::Variable { name, .. } => write!(f, "(var {})", name.lexeme),
+            Expression::Get { object, name } => {
+                write!(f, "(get {} {})", object, name.lexeme)
+            }
         }
     }
 }
