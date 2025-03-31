@@ -80,7 +80,7 @@ fn run(input: &str) {
 
     if let Err(e) = resolver.resolve(&statements) {
         eprintln!("{e}");
-        exit(70);
+        exit(65);
     }
 
     if let Err(e) = interpreter.interpret(&statements) {

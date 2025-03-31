@@ -30,6 +30,9 @@ impl<'a> Resolver<'a> {
 
     fn declare(&mut self, name: &Token) -> Result<()> {
         if let Some(scope) = self.scopes.last_mut() {
+            if scope.contains_key(&name.lexeme) {
+                return Err(self.error(name, "Already a variable with this name in this scope."));
+            }
             scope.insert(name.lexeme.clone(), false);
         }
         Ok(())
