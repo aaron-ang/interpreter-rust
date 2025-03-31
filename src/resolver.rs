@@ -7,9 +7,16 @@ use crate::{
     interpreter::Interpreter,
 };
 
+#[derive(Debug, Clone, Copy, PartialEq)]
+enum FunctionType {
+    None,
+    Function,
+}
+
 pub struct Resolver<'a> {
     interpreter: &'a mut Interpreter,
     scopes: Vec<HashMap<String, bool>>,
+    current_function: FunctionType,
 }
 
 impl<'a> Resolver<'a> {
@@ -17,6 +24,7 @@ impl<'a> Resolver<'a> {
         Resolver {
             interpreter,
             scopes: Vec::new(),
+            current_function: FunctionType::None,
         }
     }
 
@@ -68,7 +76,7 @@ impl<'a> Resolver<'a> {
             Statement::Function { name, params, body } => {
                 self.declare(name)?;
                 self.define(name);
-                self.resolve_function(params, body)?;
+                self.resolve_function(params, body, FunctionType::Function)?;
             }
             Statement::Expression(expr) => {
                 self.resolve_expression(expr)?;
@@ -87,7 +95,10 @@ impl<'a> Resolver<'a> {
             Statement::Print(expr) => {
                 self.resolve_expression(expr)?;
             }
-            Statement::Return { keyword: _, value } => {
+            Statement::Return { keyword, value } => {
+                if self.current_function == FunctionType::None {
+                    return Err(self.error(keyword, "Can't return from top-level code."));
+                }
                 if let Some(value) = value {
                     self.resolve_expression(value)?;
                 }
@@ -150,7 +161,15 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    fn resolve_function(&mut self, params: &[Token], body: &[Statement]) -> Result<()> {
+    fn resolve_function(
+        &mut self,
+        params: &[Token],
+        body: &[Statement],
+        fun_ty: FunctionType,
+    ) -> Result<()> {
+        let enclosing_fun = self.current_function;
+        self.current_function = fun_ty;
+
         self.begin_scope();
         for param in params {
             self.declare(param)?;
@@ -159,6 +178,7 @@ impl<'a> Resolver<'a> {
         self.resolve(body)?;
         self.end_scope();
 
+        self.current_function = enclosing_fun;
         Ok(())
     }
 
