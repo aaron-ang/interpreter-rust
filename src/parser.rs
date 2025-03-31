@@ -6,11 +6,16 @@ use crate::grammar::*;
 pub struct Parser<'a> {
     tokens: &'a [Token],
     current: usize,
+    next_id: usize,
 }
 
 impl<'a> Parser<'a> {
     pub fn new(tokens: &'a [Token]) -> Self {
-        Parser { tokens, current: 0 }
+        Parser {
+            tokens,
+            current: 0,
+            next_id: 0,
+        }
     }
 
     pub fn parse(&mut self) -> Result<Vec<Statement>> {
@@ -105,8 +110,10 @@ impl<'a> Parser<'a> {
     }
 
     fn for_statement(&mut self) -> Result<Statement> {
+        // Consume the opening parenthesis
         self.consume(&TokenType::LEFT_PAREN, "Expect '(' after 'for'.")?;
 
+        // Initialize the initializer
         let initializer = if self.match_(&[TokenType::SEMICOLON]) {
             None
         } else if self.match_(&[TokenType::VAR]) {
@@ -115,6 +122,7 @@ impl<'a> Parser<'a> {
             Some(self.statement()?)
         };
 
+        // Get the condition
         let condition = if !self.check(&TokenType::SEMICOLON) {
             self.expression()?
         } else {
@@ -122,6 +130,7 @@ impl<'a> Parser<'a> {
         };
         self.consume(&TokenType::SEMICOLON, "Expect ';' after loop condition.")?;
 
+        // Get the increment
         let increment = if !self.check(&TokenType::RIGHT_PAREN) {
             Some(self.expression()?)
         } else {
@@ -129,19 +138,24 @@ impl<'a> Parser<'a> {
         };
         self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after for clauses.")?;
 
+        // Get the body
         let mut body = self.statement()?;
 
-        if let Some(increment) = increment {
-            body = Statement::Block(vec![body, Statement::Expression(increment)]);
+        // Desugar the for loop into a while loop
+        // First, add the increment to the end of the body if it exists
+        if let Some(inc) = increment {
+            body = Statement::Block(vec![body, Statement::Expression(inc)]);
         }
 
+        // Then create the while loop with the condition and body
         body = Statement::While {
             condition,
             body: Box::new(body),
         };
 
-        if let Some(initializer) = initializer {
-            body = Statement::Block(vec![initializer, body]);
+        // Finally, if there's an initializer, add it before the while loop in a block
+        if let Some(init) = initializer {
+            body = Statement::Block(vec![init, body]);
         }
 
         Ok(body)
@@ -196,8 +210,9 @@ impl<'a> Parser<'a> {
         let expression = self.logic_or()?;
         if self.match_(&[TokenType::EQUAL]) {
             let value = self.expression()?;
-            if let Expression::Variable(name) = expression {
+            if let Expression::Variable { id: _, name } = expression {
                 return Ok(Expression::Assign {
+                    id: self.next_id(),
                     name,
                     value: Box::new(value),
                 });
@@ -336,7 +351,10 @@ impl<'a> Parser<'a> {
         } else if self.match_(&[TokenType::NUMBER, TokenType::STRING]) {
             Expression::Literal(self.previous().literal.clone().unwrap())
         } else if self.match_(&[TokenType::IDENTIFIER]) {
-            Expression::Variable(self.previous().clone())
+            Expression::Variable {
+                id: self.next_id(),
+                name: self.previous().clone(),
+            }
         } else if self.match_(&[TokenType::LEFT_PAREN]) {
             let expr = self.expression()?;
             self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after expression.")?;
@@ -386,6 +404,12 @@ impl<'a> Parser<'a> {
 
     fn previous(&self) -> &Token {
         &self.tokens[self.current - 1]
+    }
+
+    fn next_id(&mut self) -> usize {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
     }
 
     pub fn error(token: &Token, message: &str) -> Error {

@@ -99,7 +99,7 @@ impl<'a> Resolver<'a> {
 
     fn resolve_expression(&mut self, expr: &Expression) -> Result<()> {
         match expr {
-            Expression::Variable(name) => {
+            Expression::Variable { id, name } => {
                 if let Some(scope) = self.scopes.last() {
                     if let Some(false) = scope.get(&name.lexeme) {
                         return Err(
@@ -107,11 +107,11 @@ impl<'a> Resolver<'a> {
                         );
                     }
                 }
-                self.resolve_local(expr, name);
+                self.resolve_local(*id, name);
             }
-            Expression::Assign { name, value } => {
+            Expression::Assign { id, name, value } => {
                 self.resolve_expression(value)?;
-                self.resolve_local(expr, name);
+                self.resolve_local(*id, name);
             }
             Expression::Binary { left, op: _, right } => {
                 self.resolve_expression(left)?;
@@ -138,10 +138,10 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    fn resolve_local(&mut self, expr: &Expression, name: &Token) {
+    fn resolve_local(&mut self, exp_id: usize, name: &Token) {
         for (depth, scope) in self.scopes.iter().rev().enumerate() {
             if scope.contains_key(&name.lexeme) {
-                self.interpreter.resolve(expr, depth);
+                self.interpreter.resolve(exp_id, depth);
                 return;
             }
         }

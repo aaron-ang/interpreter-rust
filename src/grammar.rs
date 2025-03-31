@@ -1,4 +1,4 @@
-use std::{fmt, hash, rc::Rc};
+use std::{fmt, rc::Rc};
 
 use crate::callable::LoxCallable;
 
@@ -75,7 +75,7 @@ impl TokenType {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct Token {
     pub token_type: TokenType,
     pub lexeme: String,
@@ -100,21 +100,6 @@ pub enum Literal {
     String(String),
     Number(f64),
     Callable(Rc<dyn LoxCallable>),
-}
-
-// This is a workaround for the fact that Literal doesn't implement Eq.
-impl Eq for Literal {}
-
-impl hash::Hash for Literal {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
-        match self {
-            Literal::Nil => 0.hash(state),
-            Literal::Boolean(b) => b.hash(state),
-            Literal::String(s) => s.hash(state),
-            Literal::Number(n) => n.to_bits().hash(state),
-            Literal::Callable(c) => std::ptr::addr_of!(**c).hash(state),
-        }
-    }
 }
 
 impl Literal {
@@ -161,9 +146,10 @@ impl fmt::Display for Literal {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq)]
 pub enum Expression {
     Assign {
+        id: usize,
         name: Token,
         value: Box<Expression>,
     },
@@ -187,13 +173,16 @@ pub enum Expression {
         op: Token,
         right: Box<Expression>,
     },
-    Variable(Token),
+    Variable {
+        id: usize,
+        name: Token,
+    },
 }
 
 impl fmt::Display for Expression {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Expression::Assign { name, value } => {
+            Expression::Assign { id: _, name, value } => {
                 write!(f, "(assign {} {})", name.lexeme, value)
             }
             Expression::Binary { left, op, right } => {
@@ -217,7 +206,7 @@ impl fmt::Display for Expression {
             Expression::Unary { op, right } => {
                 write!(f, "({} {})", op.lexeme, right)
             }
-            Expression::Variable(name) => write!(f, "(var {})", name.lexeme),
+            Expression::Variable { id: _, name } => write!(f, "(var {})", name.lexeme),
         }
     }
 }

@@ -1,8 +1,4 @@
-use std::{
-    env, fs,
-    io::{self, Write},
-    process::exit,
-};
+use std::{env, fs, process::exit};
 
 use interpreter_starter_rust::*;
 
@@ -96,19 +92,17 @@ fn run(input: &str) {
 fn main() {
     let args: Vec<String> = env::args().collect();
     if args.len() < 3 {
-        writeln!(
-            io::stderr(),
+        eprintln!(
             "Usage: {} [tokenize|parse|evaluate|run] <filename>",
             args[0]
-        )
-        .unwrap();
+        );
         return;
     }
 
     let command = &args[1];
     let filename = &args[2];
     let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
-        writeln!(io::stderr(), "Failed to read file {filename}").unwrap();
+        eprintln!("Failed to read file {filename}");
         String::new()
     });
 
@@ -118,8 +112,7 @@ fn main() {
         "evaluate" => evaluate(&file_contents),
         "run" => run(&file_contents),
         _ => {
-            writeln!(io::stderr(), "Unknown command: {command}").unwrap();
-            return;
+            eprintln!("Unknown command: {command}");
         }
     }
 }

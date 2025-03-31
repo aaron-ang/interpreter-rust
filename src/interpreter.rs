@@ -14,7 +14,13 @@ use crate::grammar::*;
 pub struct Interpreter {
     globals: Environment,
     env: Environment,
-    locals: HashMap<Expression, usize>,
+    locals: HashMap<usize, usize>,
+}
+
+impl Default for Interpreter {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Interpreter {
@@ -38,13 +44,12 @@ impl Interpreter {
         }
     }
 
-    pub fn resolve(&mut self, expr: &Expression, depth: usize) {
-        println!("Resolving {expr:?} at depth {depth}");
-        self.locals.insert(expr.clone(), depth);
+    pub fn resolve(&mut self, exp_id: usize, depth: usize) {
+        self.locals.insert(exp_id, depth);
     }
 
-    pub fn lookup_variable(&mut self, name: &Token, expr: &Expression) -> Result<Literal> {
-        if let Some(depth) = self.locals.get(expr) {
+    pub fn lookup_variable(&mut self, name: &Token, exp_id: &usize) -> Result<Literal> {
+        if let Some(depth) = self.locals.get(exp_id) {
             self.env.get_at(*depth, &name.lexeme)
         } else {
             self.globals.get(name)
@@ -126,9 +131,9 @@ impl Interpreter {
 
     pub fn evaluate(&mut self, expr: &Expression) -> Result<Literal> {
         let literal = match expr {
-            Expression::Assign { name, value } => {
+            Expression::Assign { id, name, value } => {
                 let value = self.evaluate(value)?;
-                if let Some(distance) = self.locals.get(expr) {
+                if let Some(distance) = self.locals.get(id) {
                     self.env.assign_at(*distance, &name.lexeme, &value)?;
                 } else {
                     self.globals.assign(name, &value)?;
@@ -217,7 +222,7 @@ impl Interpreter {
                     _ => unreachable!(),
                 }
             }
-            Expression::Variable(var) => self.lookup_variable(var, expr)?,
+            Expression::Variable { id, name } => self.lookup_variable(name, id)?,
         };
         Ok(literal)
     }

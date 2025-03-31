@@ -37,7 +37,7 @@ impl LoxCallable for Callable {
 
     fn to_string(&self) -> String {
         match self {
-            Callable::Native { .. } => format!("<native fn>"),
+            Callable::Native { .. } => "<native fn>".to_string(),
             Callable::Function(f) => format!("<fn {}>", f.name.lexeme),
         }
     }
@@ -52,16 +52,11 @@ pub struct Function {
 }
 
 impl Function {
-    pub fn new(
-        name: &Token,
-        params: &Vec<Token>,
-        body: &Vec<Statement>,
-        closure: &Environment,
-    ) -> Self {
+    pub fn new(name: &Token, params: &[Token], body: &[Statement], closure: &Environment) -> Self {
         Self {
             name: name.clone(),
-            params: params.clone(),
-            body: body.clone(),
+            params: params.to_vec(),
+            body: body.to_vec(),
             closure: closure.clone(),
         }
     }

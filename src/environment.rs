@@ -4,9 +4,18 @@ use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 use crate::error::RuntimeError;
 use crate::grammar::{Literal, Token};
 
+/// `Environment` represents a variable scope.
+/// Uses `Rc<RefCell<>>` to allow multiple references to the same environment
+/// while still enabling mutation through these references.
 #[derive(Debug, Clone)]
 pub struct Environment {
     inner: Rc<RefCell<EnvironmentImpl>>,
+}
+
+impl Default for Environment {
+    fn default() -> Self {
+        Self::new()
+    }
 }
 
 impl Environment {
@@ -18,8 +27,8 @@ impl Environment {
 
     pub fn new_enclosed(enclosing: &Self) -> Self {
         Self {
-            inner: Rc::new(RefCell::new(EnvironmentImpl::enclose(
-                enclosing.inner.clone(),
+            inner: Rc::new(RefCell::new(EnvironmentImpl::with_parent(
+                enclosing.clone(),
             ))),
         }
     }
@@ -37,49 +46,52 @@ impl Environment {
     }
 
     pub fn get_at(&self, distance: usize, name: &str) -> Result<Literal> {
-        self.ancestor(distance).borrow().get_no_parent(name)
+        self.ancestor(distance).inner.borrow().get_from_local(name)
     }
 
     pub fn assign_at(&self, distance: usize, name: &str, value: &Literal) -> Result<()> {
-        Ok(self
-            .ancestor(distance)
+        self.ancestor(distance)
+            .inner
             .borrow_mut()
-            .assign_no_parent(name, value))
+            .assign_to_local(name, value);
+        Ok(())
     }
 
-    fn ancestor(&self, distance: usize) -> Rc<RefCell<EnvironmentImpl>> {
-        let mut env = self.inner.clone();
+    fn ancestor(&self, distance: usize) -> Environment {
+        let mut env = self.clone();
         for _ in 0..distance {
-            let next_env = env
+            let parent = env
+                .inner
                 .borrow()
-                .enclosing
+                .parent
                 .as_ref()
-                .expect("No enclosing environment found")
+                .expect("No parent environment found")
                 .clone();
-            env = next_env;
+            env = parent;
         }
         env
     }
 }
 
+/// Contains the actual environment implementation and references to parent environments
 #[derive(Debug)]
 struct EnvironmentImpl {
     values: HashMap<String, Literal>,
-    enclosing: Option<Rc<RefCell<EnvironmentImpl>>>,
+    parent: Option<Environment>,
 }
 
 impl EnvironmentImpl {
     fn new() -> Self {
         Self {
             values: HashMap::new(),
-            enclosing: None,
+            parent: None,
         }
     }
 
-    fn enclose(inner: Rc<RefCell<EnvironmentImpl>>) -> Self {
+    fn with_parent(parent: Environment) -> Self {
         Self {
             values: HashMap::new(),
-            enclosing: Some(inner),
+            parent: Some(parent),
         }
     }
 
@@ -92,8 +104,8 @@ impl EnvironmentImpl {
             return Ok(value.clone());
         }
 
-        if let Some(enclosing) = &self.enclosing {
-            return enclosing.borrow().get(token);
+        if let Some(parent) = &self.parent {
+            return parent.get(token);
         }
 
         Err(RuntimeError::UndefinedVariable {
@@ -103,18 +115,18 @@ impl EnvironmentImpl {
         .into())
     }
 
-    fn get_no_parent(&self, name: &str) -> Result<Literal> {
+    fn get_from_local(&self, name: &str) -> Result<Literal> {
         Ok(self.values.get(name).cloned().unwrap_or(Literal::Nil))
     }
 
-    fn assign(&mut self, token: &Token, val: &Literal) -> Result<()> {
+    fn assign(&mut self, token: &Token, value: &Literal) -> Result<()> {
         if self.values.contains_key(&token.lexeme) {
-            self.values.insert(token.lexeme.clone(), val.clone());
+            self.assign_to_local(&token.lexeme, value);
             return Ok(());
         }
 
-        if let Some(enclosing) = &self.enclosing {
-            return enclosing.borrow_mut().assign(token, val);
+        if let Some(parent) = &self.parent {
+            return parent.assign(token, value);
         }
 
         Err(RuntimeError::UndefinedVariable {
@@ -124,8 +136,8 @@ impl EnvironmentImpl {
         .into())
     }
 
-    fn assign_no_parent(&mut self, name: &str, val: &Literal) {
-        self.values.insert(name.to_string(), val.clone());
+    fn assign_to_local(&mut self, name: &str, value: &Literal) {
+        self.values.insert(name.to_string(), value.clone());
     }
 }
 
@@ -134,8 +146,8 @@ impl fmt::Display for Environment {
         let env = self.inner.borrow();
         write!(f, "{:?}", env.values)?;
 
-        if let Some(ref enclosing) = env.enclosing {
-            write!(f, " -> {:?}", enclosing)?;
+        if let Some(ref parent) = env.parent {
+            write!(f, " -> {:?}", parent)?;
         }
 
         Ok(())
