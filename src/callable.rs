@@ -1,5 +1,5 @@
 use anyhow::Result;
-use std::{fmt, ops::ControlFlow};
+use std::{fmt, ops::ControlFlow, rc::Rc};
 
 use crate::environment::Environment;
 use crate::grammar::{Literal, Statement, Token};
@@ -17,8 +17,9 @@ pub enum Callable {
         arity: usize,
         call: fn(&mut Interpreter, &[Literal]) -> Result<Literal>,
     },
-    Function(Function),
+    Function(LoxFunction),
     Class(LoxClass),
+    ClassInstance(LoxInstance),
 }
 
 impl LoxCallable for Callable {
@@ -27,6 +28,7 @@ impl LoxCallable for Callable {
             Callable::Native { arity, .. } => *arity,
             Callable::Function(f) => f.params.len(),
             Callable::Class(_) => 0,
+            Callable::ClassInstance(_) => 0,
         }
     }
 
@@ -35,8 +37,14 @@ impl LoxCallable for Callable {
             Callable::Native { call, .. } => call(interpreter, arguments),
             Callable::Function(func) => func.execute(interpreter, arguments),
             Callable::Class(class) => {
-                todo!()
+                let instance = LoxInstance::new(class.clone());
+                Ok(Literal::Callable(Rc::new(Callable::ClassInstance(
+                    instance,
+                ))))
             }
+            Callable::ClassInstance(instance) => Ok(Literal::Callable(Rc::new(
+                Callable::ClassInstance(instance.clone()),
+            ))),
         }
     }
 
@@ -44,20 +52,21 @@ impl LoxCallable for Callable {
         match self {
             Callable::Native { .. } => "<native fn>".to_string(),
             Callable::Function(f) => format!("<fn {}>", f.name.lexeme),
-            Callable::Class(class) => format!("{}", class.name),
+            Callable::Class(class) => class.name.to_string(),
+            Callable::ClassInstance(instance) => format!("{} instance", instance.klass.name),
         }
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Function {
+pub struct LoxFunction {
     pub name: Token,
     params: Vec<Token>,
     body: Vec<Statement>,
     closure: Environment,
 }
 
-impl Function {
+impl LoxFunction {
     pub fn new(name: &Token, params: &[Token], body: &[Statement], closure: &Environment) -> Self {
         Self {
             name: name.clone(),
@@ -89,5 +98,16 @@ pub struct LoxClass {
 impl LoxClass {
     pub fn new(name: String) -> Self {
         LoxClass { name }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LoxInstance {
+    klass: LoxClass,
+}
+
+impl LoxInstance {
+    pub fn new(klass: LoxClass) -> Self {
+        LoxInstance { klass }
     }
 }

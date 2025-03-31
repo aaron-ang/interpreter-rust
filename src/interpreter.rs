@@ -6,7 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::callable::{Callable, Function, LoxClass};
+use crate::callable::{Callable, LoxClass, LoxFunction};
 use crate::environment::Environment;
 use crate::error::RuntimeError;
 use crate::grammar::*;
@@ -74,8 +74,8 @@ impl Interpreter {
             Statement::Class { name, methods: _ } => {
                 self.env.define(&name.lexeme, Literal::Nil);
                 let klass = LoxClass::new(name.lexeme.clone());
-                self.env
-                    .assign(name, &Literal::Callable(Rc::new(Callable::Class(klass))))?;
+                let klass_literal = Literal::Callable(Rc::new(Callable::Class(klass)));
+                self.env.assign(name, &klass_literal)?;
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Expression(expr) => {
@@ -120,9 +120,9 @@ impl Interpreter {
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Function { name, params, body } => {
-                let func = Function::new(name, params, body, &self.env);
-                let func_literal = Literal::Callable(Rc::new(Callable::Function(func)));
-                self.env.define(&name.lexeme, func_literal);
+                let fun = LoxFunction::new(name, params, body, &self.env);
+                let fun_literal = Literal::Callable(Rc::new(Callable::Function(fun)));
+                self.env.define(&name.lexeme, fun_literal);
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Return { keyword: _, value } => {

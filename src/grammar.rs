@@ -3,7 +3,7 @@ use std::{fmt, rc::Rc};
 use crate::callable::LoxCallable;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, strum::Display)]
-#[allow(non_camel_case_types)]
+#[allow(non_camel_case_types, clippy::upper_case_acronyms)]
 pub enum TokenType {
     LEFT_PAREN,
     RIGHT_PAREN,
