@@ -1,0 +1,14 @@
+class Counter {
+  init(startValue) {
+    if (startValue < 0) {
+      print "startValue can't be negative";
+      this.count = 0;
+    } else {
+      this.count = startValue;
+    }
+  }
+}
+
+var instance = Counter(-52);
+print instance.count;
+print instance.init(52).count;

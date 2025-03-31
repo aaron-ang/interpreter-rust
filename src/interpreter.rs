@@ -54,7 +54,8 @@ impl Interpreter {
                 let methods: HashMap<String, Rc<LoxFunction>> = methods
                     .iter()
                     .map(|method| {
-                        let function = LoxFunction::new(method, &self.env);
+                        let is_initializer = method.name.lexeme == "init";
+                        let function = LoxFunction::new(method, &self.env, is_initializer);
                         (method.name.lexeme.clone(), Rc::new(function))
                     })
                     .collect();
@@ -105,7 +106,7 @@ impl Interpreter {
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Function(fun) => {
-                let fun = LoxFunction::new(fun, &self.env);
+                let fun = LoxFunction::new(fun, &self.env, false);
                 let name = fun.name();
                 self.env.define(&name, Literal::Function(Rc::new(fun)));
                 Ok(ControlFlow::Continue(()))

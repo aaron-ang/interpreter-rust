@@ -28,30 +28,15 @@ pub trait LoxCallable: fmt::Debug {
 pub struct LoxFunction {
     declaration: Function,
     closure: Environment,
+    is_initializer: bool,
 }
 
 impl LoxFunction {
-    pub fn new(fun: &Function, closure: &Environment) -> Self {
+    pub fn new(fun: &Function, closure: &Environment, is_initializer: bool) -> Self {
         Self {
             declaration: fun.clone(),
             closure: closure.clone(),
-        }
-    }
-
-    fn execute(
-        &self,
-        interpreter: &mut Interpreter,
-        arguments: &[Literal],
-    ) -> InterpreterResult<Literal> {
-        let env = Environment::new_enclosed(&self.closure);
-        // Bind parameters to arguments
-        for (param, arg) in self.declaration.params.iter().zip(arguments) {
-            env.define(&param.lexeme, arg.clone());
-        }
-        // Execute function body in the new environment
-        match interpreter.execute_block(&self.declaration.body, env)? {
-            ControlFlow::Break(value) => Ok(value),
-            ControlFlow::Continue(()) => Ok(Literal::Nil),
+            is_initializer,
         }
     }
 
@@ -59,13 +44,14 @@ impl LoxFunction {
         self.declaration.name.lexeme.clone()
     }
 
-    fn bind(&self, instance: &LoxInstance) -> InterpreterResult<LoxFunction> {
+    fn bind(&self, instance: Rc<RefCell<LoxInstance>>) -> InterpreterResult<LoxFunction> {
         let env = Environment::new_enclosed(&self.closure);
-        env.define(
-            "this",
-            Literal::Instance(Rc::new(RefCell::new(instance.clone()))),
-        );
-        Ok(LoxFunction::new(&self.declaration, &env))
+        env.define("this", Literal::Instance(instance));
+        Ok(LoxFunction::new(
+            &self.declaration,
+            &env,
+            self.is_initializer,
+        ))
     }
 }
 
@@ -79,7 +65,18 @@ impl LoxCallable for LoxFunction {
         interpreter: &mut Interpreter,
         arguments: &[Literal],
     ) -> InterpreterResult<Literal> {
-        self.execute(interpreter, arguments)
+        let env = Environment::new_enclosed(&self.closure);
+        // Bind parameters to arguments
+        for (param, arg) in self.declaration.params.iter().zip(arguments) {
+            env.define(&param.lexeme, arg.clone());
+        }
+        // Execute function body in the new environment
+        let result = interpreter.execute_block(&self.declaration.body, env)?;
+        match result {
+            ControlFlow::Break(value) => Ok(value),
+            _ if self.is_initializer => self.closure.get_at(0, "this"),
+            _ => Ok(Literal::Nil),
+        }
     }
 
     fn to_string(&self) -> String {
@@ -136,8 +133,8 @@ impl LoxClass {
         LoxClass { name, methods }
     }
 
-    fn find_method(&self, name: &Token) -> Option<Rc<LoxFunction>> {
-        if let Some(method) = self.methods.get(&name.lexeme) {
+    fn find_method(&self, name: &str) -> Option<Rc<LoxFunction>> {
+        if let Some(method) = self.methods.get(name) {
             return Some(method.clone());
         }
         None
@@ -146,16 +143,27 @@ impl LoxClass {
 
 impl LoxCallable for LoxClass {
     fn arity(&self) -> usize {
-        0
+        let initializer = self.find_method("init");
+        if let Some(initializer) = initializer {
+            initializer.arity()
+        } else {
+            0
+        }
     }
 
     fn call(
         &self,
-        _interpreter: &mut Interpreter,
-        _arguments: &[Literal],
+        interpreter: &mut Interpreter,
+        arguments: &[Literal],
     ) -> InterpreterResult<Literal> {
         let instance = LoxInstance::new(self.clone());
-        Ok(Literal::Instance(Rc::new(RefCell::new(instance))))
+        let rc_instance = Rc::new(RefCell::new(instance));
+        if let Some(initializer) = self.find_method("init") {
+            initializer
+                .bind(rc_instance.clone())?
+                .call(interpreter, arguments)?;
+        }
+        Ok(Literal::Instance(rc_instance))
     }
 
     fn to_string(&self) -> String {
@@ -182,8 +190,9 @@ impl LoxInstance {
             return Ok(value.clone());
         }
 
-        if let Some(method) = self.klass.find_method(name) {
-            return Ok(Literal::Function(Rc::new(method.bind(self)?)));
+        if let Some(method) = self.klass.find_method(&name.lexeme) {
+            let instance = Rc::new(RefCell::new(self.clone()));
+            return Ok(Literal::Function(Rc::new(method.bind(instance)?)));
         }
 
         Err(RuntimeError::UndefinedProperty(name.lexeme.clone()))
