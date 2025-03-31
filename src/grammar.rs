@@ -214,6 +214,10 @@ impl fmt::Display for Expression {
 #[derive(Debug, Clone)]
 pub enum Statement {
     Block(Vec<Statement>),
+    Class {
+        name: Token,
+        methods: Vec<Statement>,
+    },
     Expression(Expression),
     If {
         condition: Expression,

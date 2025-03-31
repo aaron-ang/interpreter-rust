@@ -18,6 +18,7 @@ pub enum Callable {
         call: fn(&mut Interpreter, &[Literal]) -> Result<Literal>,
     },
     Function(Function),
+    Class(LoxClass),
 }
 
 impl LoxCallable for Callable {
@@ -25,6 +26,7 @@ impl LoxCallable for Callable {
         match self {
             Callable::Native { arity, .. } => *arity,
             Callable::Function(f) => f.params.len(),
+            Callable::Class(_) => 0,
         }
     }
 
@@ -32,6 +34,9 @@ impl LoxCallable for Callable {
         match self {
             Callable::Native { call, .. } => call(interpreter, arguments),
             Callable::Function(func) => func.execute(interpreter, arguments),
+            Callable::Class(class) => {
+                todo!()
+            }
         }
     }
 
@@ -39,6 +44,7 @@ impl LoxCallable for Callable {
         match self {
             Callable::Native { .. } => "<native fn>".to_string(),
             Callable::Function(f) => format!("<fn {}>", f.name.lexeme),
+            Callable::Class(class) => format!("{}", class.name),
         }
     }
 }
@@ -72,5 +78,16 @@ impl Function {
             ControlFlow::Break(value) => Ok(value),
             ControlFlow::Continue(()) => Ok(Literal::Nil),
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct LoxClass {
+    pub name: String,
+}
+
+impl LoxClass {
+    pub fn new(name: String) -> Self {
+        LoxClass { name }
     }
 }

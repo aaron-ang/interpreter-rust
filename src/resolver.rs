@@ -66,6 +66,10 @@ impl<'a> Resolver<'a> {
                 self.resolve(statements)?;
                 self.end_scope();
             }
+            Statement::Class { name, methods: _ } => {
+                self.declare(name)?;
+                self.define(name);
+            }
             Statement::Variable { name, init } => {
                 self.declare(name)?;
                 if let Some(expr) = init {

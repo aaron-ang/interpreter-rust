@@ -111,8 +111,6 @@ fn main() {
         "parse" => parse(&file_contents),
         "evaluate" => evaluate(&file_contents),
         "run" => run(&file_contents),
-        _ => {
-            eprintln!("Unknown command: {command}");
-        }
+        _ => eprintln!("Unknown command: {command}"),
     }
 }

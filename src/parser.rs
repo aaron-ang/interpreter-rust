@@ -27,13 +27,28 @@ impl<'a> Parser<'a> {
     }
 
     fn declaration(&mut self) -> Result<Statement> {
-        if self.match_(&[TokenType::FUN]) {
+        if self.match_(&[TokenType::CLASS]) {
+            self.class_declaration()
+        } else if self.match_(&[TokenType::FUN]) {
             self.function("function")
         } else if self.match_(&[TokenType::VAR]) {
             self.variable()
         } else {
             self.statement()
         }
+    }
+
+    fn class_declaration(&mut self) -> Result<Statement> {
+        let name = self
+            .consume(&TokenType::IDENTIFIER, "Expect class name.")?
+            .clone();
+        self.consume(&TokenType::LEFT_BRACE, "Expect '{' before class body.")?;
+        let mut methods = vec![];
+        while !self.check(&TokenType::RIGHT_BRACE) && !self.is_at_end() {
+            methods.push(self.function("method")?);
+        }
+        self.consume(&TokenType::RIGHT_BRACE, "Expect '}' after class body.")?;
+        Ok(Statement::Class { name, methods })
     }
 
     fn function(&mut self, kind: &str) -> Result<Statement> {

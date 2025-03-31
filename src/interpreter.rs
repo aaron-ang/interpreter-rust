@@ -6,7 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use crate::callable::{Callable, Function};
+use crate::callable::{Callable, Function, LoxClass};
 use crate::environment::Environment;
 use crate::error::RuntimeError;
 use crate::grammar::*;
@@ -70,6 +70,13 @@ impl Interpreter {
             Statement::Block(statements) => {
                 let env = Environment::new_enclosed(&self.env);
                 self.execute_block(statements, env)
+            }
+            Statement::Class { name, methods: _ } => {
+                self.env.define(&name.lexeme, Literal::Nil);
+                let klass = LoxClass::new(name.lexeme.clone());
+                self.env
+                    .assign(name, &Literal::Callable(Rc::new(Callable::Class(klass))))?;
+                Ok(ControlFlow::Continue(()))
             }
             Statement::Expression(expr) => {
                 self.evaluate(expr)?;
