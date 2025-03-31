@@ -192,6 +192,10 @@ pub enum Expression {
         object: Box<Expression>,
         name: Token,
     },
+    This {
+        id: usize,
+        keyword: Token,
+    },
 }
 
 impl fmt::Display for Expression {
@@ -231,6 +235,9 @@ impl fmt::Display for Expression {
             Expression::Variable { name, .. } => write!(f, "(var {})", name.lexeme),
             Expression::Get { object, name } => {
                 write!(f, "(get {} {})", object, name.lexeme)
+            }
+            Expression::This { keyword, .. } => {
+                write!(f, "(this {})", keyword.lexeme)
             }
         }
     }

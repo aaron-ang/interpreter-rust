@@ -72,9 +72,16 @@ impl<'a> Resolver<'a> {
             Statement::Class { name, methods } => {
                 self.declare(name)?;
                 self.define(name);
+
+                self.begin_scope();
+                self.scopes
+                    .last_mut()
+                    .unwrap()
+                    .insert("this".to_string(), true);
                 for method in methods {
                     self.resolve_function(method, FunctionType::Method)?;
                 }
+                self.end_scope();
             }
             Statement::Variable { name, init } => {
                 self.declare(name)?;
@@ -164,6 +171,9 @@ impl<'a> Resolver<'a> {
             Expression::Set { object, value, .. } => {
                 self.resolve_expression(value)?;
                 self.resolve_expression(object)?;
+            }
+            Expression::This { id, keyword } => {
+                self.resolve_local(*id, keyword);
             }
         }
         Ok(())

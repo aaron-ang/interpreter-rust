@@ -106,7 +106,7 @@ impl Interpreter {
             }
             Statement::Function(fun) => {
                 let fun = LoxFunction::new(fun, &self.env);
-                let name = fun.name.lexeme.clone();
+                let name = fun.name();
                 self.env.define(&name, Literal::Function(Rc::new(fun)));
                 Ok(ControlFlow::Continue(()))
             }
@@ -215,7 +215,7 @@ impl Interpreter {
                     _ => unreachable!(),
                 }
             }
-            Expression::Variable { id, name } => self.lookup_variable(name, id)?,
+            Expression::Variable { id, name } => self.lookup_variable(id, name)?,
             Expression::Get { object, name } => {
                 let object = self.evaluate(object)?;
                 match object {
@@ -238,6 +238,7 @@ impl Interpreter {
                     _ => return Err(self.type_error("Only instances have fields.")),
                 }
             }
+            Expression::This { id, keyword } => self.lookup_variable(id, keyword)?,
         };
         Ok(literal)
     }
@@ -262,7 +263,7 @@ impl Interpreter {
         self.locals.insert(exp_id, depth);
     }
 
-    fn lookup_variable(&mut self, name: &Token, exp_id: &usize) -> InterpreterResult<Literal> {
+    fn lookup_variable(&mut self, exp_id: &usize, name: &Token) -> InterpreterResult<Literal> {
         if let Some(depth) = self.locals.get(exp_id) {
             self.env.get_at(*depth, &name.lexeme)
         } else {

@@ -382,6 +382,11 @@ impl<'a> Parser<'a> {
             Expression::Literal(Literal::Nil)
         } else if self.match_(&[TokenType::NUMBER, TokenType::STRING]) {
             Expression::Literal(self.previous().literal.clone().unwrap())
+        } else if self.match_(&[TokenType::THIS]) {
+            Expression::This {
+                id: self.next_id(),
+                keyword: self.previous().clone(),
+            }
         } else if self.match_(&[TokenType::IDENTIFIER]) {
             Expression::Variable {
                 id: self.next_id(),

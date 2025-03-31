@@ -10,7 +10,7 @@ use std::{
 use crate::{
     environment::Environment,
     error::RuntimeError,
-    grammar::{Function, Literal, Statement, Token},
+    grammar::{Function, Literal, Token},
     interpreter::{Interpreter, InterpreterResult},
 };
 
@@ -26,18 +26,14 @@ pub trait LoxCallable: fmt::Debug {
 
 #[derive(Debug, Clone)]
 pub struct LoxFunction {
-    pub name: Token,
-    params: Vec<Token>,
-    body: Vec<Statement>,
+    declaration: Function,
     closure: Environment,
 }
 
 impl LoxFunction {
     pub fn new(fun: &Function, closure: &Environment) -> Self {
         Self {
-            name: fun.name.clone(),
-            params: fun.params.to_vec(),
-            body: fun.body.to_vec(),
+            declaration: fun.clone(),
             closure: closure.clone(),
         }
     }
@@ -49,20 +45,33 @@ impl LoxFunction {
     ) -> InterpreterResult<Literal> {
         let env = Environment::new_enclosed(&self.closure);
         // Bind parameters to arguments
-        for (param, arg) in self.params.iter().zip(arguments) {
+        for (param, arg) in self.declaration.params.iter().zip(arguments) {
             env.define(&param.lexeme, arg.clone());
         }
         // Execute function body in the new environment
-        match interpreter.execute_block(&self.body, env)? {
+        match interpreter.execute_block(&self.declaration.body, env)? {
             ControlFlow::Break(value) => Ok(value),
             ControlFlow::Continue(()) => Ok(Literal::Nil),
         }
+    }
+
+    pub fn name(&self) -> String {
+        self.declaration.name.lexeme.clone()
+    }
+
+    fn bind(&self, instance: &LoxInstance) -> InterpreterResult<LoxFunction> {
+        let env = Environment::new_enclosed(&self.closure);
+        env.define(
+            "this",
+            Literal::Instance(Rc::new(RefCell::new(instance.clone()))),
+        );
+        Ok(LoxFunction::new(&self.declaration, &env))
     }
 }
 
 impl LoxCallable for LoxFunction {
     fn arity(&self) -> usize {
-        self.params.len()
+        self.declaration.params.len()
     }
 
     fn call(
@@ -74,7 +83,7 @@ impl LoxCallable for LoxFunction {
     }
 
     fn to_string(&self) -> String {
-        format!("<fn {}>", self.name.lexeme)
+        format!("<fn {}>", self.name())
     }
 }
 
@@ -174,7 +183,7 @@ impl LoxInstance {
         }
 
         if let Some(method) = self.klass.find_method(name) {
-            return Ok(Literal::Function(method));
+            return Ok(Literal::Function(Rc::new(method.bind(self)?)));
         }
 
         Err(RuntimeError::UndefinedProperty(name.lexeme.clone()))
