@@ -72,9 +72,13 @@ impl LoxCallable for LoxFunction {
         }
         // Execute function body in the new environment
         let result = interpreter.execute_block(&self.declaration.body, env)?;
+
+        if self.is_initializer {
+            return self.closure.get_at(0, "this");
+        }
+
         match result {
             ControlFlow::Break(value) => Ok(value),
-            _ if self.is_initializer => self.closure.get_at(0, "this"),
             _ => Ok(Literal::Nil),
         }
     }

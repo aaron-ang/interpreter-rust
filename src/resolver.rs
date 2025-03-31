@@ -13,6 +13,7 @@ type ResolverResult<T> = Result<T, CompileError>;
 enum FunctionType {
     None,
     Function,
+    Initializer,
     Method,
 }
 
@@ -90,7 +91,12 @@ impl<'a> Resolver<'a> {
                     .unwrap()
                     .insert("this".to_string(), true);
                 for method in methods {
-                    self.resolve_function(method, FunctionType::Method)?;
+                    let declaration = if method.name.lexeme == "init" {
+                        FunctionType::Initializer
+                    } else {
+                        FunctionType::Method
+                    };
+                    self.resolve_function(method, declaration)?;
                 }
                 self.end_scope();
 
@@ -130,6 +136,11 @@ impl<'a> Resolver<'a> {
                     return Err(self.error(keyword, "Can't return from top-level code."));
                 }
                 if let Some(value) = value {
+                    if self.current_function == FunctionType::Initializer {
+                        return Err(
+                            self.error(keyword, "Can't return a value from an initializer.")
+                        );
+                    }
                     self.resolve_expression(value)?;
                 }
             }
