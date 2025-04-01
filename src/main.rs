@@ -1,91 +1,87 @@
-use std::{env, fs, process::exit};
+use std::{env, fs, process::exit, str::FromStr};
+
+use strum::EnumString;
 
 use interpreter_starter_rust::*;
 
-fn tokenize(input: &str) {
-    let mut scanner = Scanner::new(input);
-    let tokens = scanner.scan_tokens();
-    for token in tokens {
-        println!("{token}");
-    }
-    if scanner.error {
-        exit(65);
+#[derive(EnumString)]
+#[strum(serialize_all = "lowercase")]
+enum Command {
+    Tokenize,
+    Parse,
+    Evaluate,
+    Run,
+}
+
+impl Command {
+    fn execute(&self, input: &str) {
+        let mut scanner = Scanner::new(input);
+        let tokens = scanner.scan_tokens();
+
+        if let Command::Tokenize = self {
+            for token in tokens {
+                println!("{token}");
+            }
+            if scanner.error {
+                exit(SYNTAX_ERROR);
+            }
+            return;
+        }
+
+        if scanner.error {
+            exit(SYNTAX_ERROR);
+        }
+
+        match self {
+            Command::Parse => {
+                let mut parser = Parser::new(&tokens);
+                let expression = handle_syntax_error(parser.expression());
+                println!("{expression}");
+            }
+            Command::Evaluate => {
+                let mut parser = Parser::new(&tokens);
+                let expr = handle_syntax_error(parser.expression());
+
+                let mut interpreter = Interpreter::new();
+                let val = handle_runtime_error(interpreter.evaluate(&expr));
+
+                match val {
+                    Literal::Number(n) => println!("{n}"),
+                    _ => println!("{val}"),
+                }
+            }
+            Command::Run => {
+                let mut parser = Parser::new(&tokens);
+                let statements = handle_syntax_error(parser.parse());
+
+                let mut interpreter = Interpreter::new();
+                let mut resolver = Resolver::new(&mut interpreter);
+
+                handle_syntax_error(resolver.resolve(&statements));
+                handle_runtime_error(interpreter.interpret(&statements));
+            }
+            Command::Tokenize => unreachable!(),
+        }
     }
 }
 
-fn parse(input: &str) {
-    let mut scanner = Scanner::new(input);
-    let tokens = scanner.scan_tokens();
-    if scanner.error {
-        exit(65);
-    }
-
-    let mut parser = Parser::new(&tokens);
-    match parser.expression() {
-        Ok(expression) => println!("{expression}"),
-        Err(msg) => {
-            eprintln!("{msg}");
-            exit(65);
+fn handle_syntax_error<T>(result: Result<T, impl std::fmt::Display>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("{err}");
+            exit(SYNTAX_ERROR);
         }
     }
 }
 
-fn evaluate(input: &str) {
-    let mut scanner = Scanner::new(input);
-    let tokens = scanner.scan_tokens();
-    if scanner.error {
-        exit(65);
-    }
-
-    let mut parser = Parser::new(&tokens);
-    let expr = match parser.expression() {
-        Ok(expr) => expr,
-        Err(msg) => {
-            eprintln!("{msg}");
-            exit(65);
+fn handle_runtime_error<T>(result: Result<T, impl std::fmt::Display>) -> T {
+    match result {
+        Ok(value) => value,
+        Err(err) => {
+            eprintln!("{err}");
+            exit(RUNTIME_ERROR);
         }
-    };
-
-    let mut interpreter = Interpreter::new();
-    match interpreter.evaluate(&expr) {
-        Ok(val) => match val {
-            Literal::Number(n) => println!("{n}"),
-            _ => println!("{val}"),
-        },
-        Err(msg) => {
-            eprintln!("{msg}");
-            exit(70);
-        }
-    }
-}
-
-fn run(input: &str) {
-    let mut scanner = Scanner::new(input);
-    let tokens = scanner.scan_tokens();
-    if scanner.error {
-        exit(65);
-    }
-
-    let mut parser = Parser::new(&tokens);
-    let statements = match parser.parse() {
-        Ok(statements) => statements,
-        Err(msg) => {
-            eprintln!("{msg}");
-            exit(65);
-        }
-    };
-
-    let mut interpreter = Interpreter::new();
-    let mut resolver = Resolver::new(&mut interpreter);
-
-    if let Err(e) = resolver.resolve(&statements) {
-        eprintln!("{e}");
-        exit(65);
-    }
-
-    if let Err(e) = interpreter.interpret(&statements) {
-        eprintln!("{e}");
-        exit(70);
     }
 }
 
@@ -96,21 +92,19 @@ fn main() {
             "Usage: {} [tokenize|parse|evaluate|run] <filename>",
             args[0]
         );
-        return;
+        exit(COMMAND_LINE_USAGE);
     }
 
-    let command = &args[1];
+    let command = Command::from_str(&args[1]).unwrap_or_else(|_| {
+        eprintln!("Unknown command: {}", args[1]);
+        exit(COMMAND_LINE_USAGE);
+    });
+
     let filename = &args[2];
     let file_contents = fs::read_to_string(filename).unwrap_or_else(|_| {
         eprintln!("Failed to read file {filename}");
-        String::new()
+        exit(CANNOT_OPEN_INPUT);
     });
 
-    match command.as_str() {
-        "tokenize" => tokenize(&file_contents),
-        "parse" => parse(&file_contents),
-        "evaluate" => evaluate(&file_contents),
-        "run" => run(&file_contents),
-        _ => eprintln!("Unknown command: {command}"),
-    }
+    command.execute(&file_contents);
 }

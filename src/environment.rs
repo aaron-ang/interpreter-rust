@@ -1,7 +1,7 @@
 use std::{cell::RefCell, collections::HashMap, fmt, rc::Rc};
 
 use crate::{
-    error::RuntimeError,
+    error::LoxError,
     grammar::{Literal, Token},
     interpreter::InterpreterResult,
 };
@@ -110,8 +110,8 @@ impl EnvironmentImpl {
             return parent.get(token);
         }
 
-        Err(RuntimeError::UndefinedVariable {
-            lexeme: token.lexeme.clone(),
+        Err(LoxError::UndefinedVariable {
+            name: token.lexeme.clone(),
             line: token.line,
         })
     }
@@ -130,8 +130,8 @@ impl EnvironmentImpl {
             return parent.assign(token, value);
         }
 
-        Err(RuntimeError::UndefinedVariable {
-            lexeme: token.lexeme.clone(),
+        Err(LoxError::UndefinedVariable {
+            name: token.lexeme.clone(),
             line: token.line,
         })
     }

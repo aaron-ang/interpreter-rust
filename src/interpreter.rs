@@ -3,12 +3,13 @@ use std::{collections::HashMap, ops::ControlFlow, rc::Rc};
 
 use crate::{
     callable::{LoxClass, LoxFunction, Native},
+    constants::{errors::*, INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD},
     environment::Environment,
-    error::RuntimeError,
+    error::LoxError,
     grammar::{Expression, Literal, Statement, Token, TokenType},
 };
 
-pub type InterpreterResult<T> = Result<T, RuntimeError>;
+pub type InterpreterResult<T> = Result<T, LoxError>;
 
 pub struct Interpreter {
     globals: Environment,
@@ -68,13 +69,13 @@ impl Interpreter {
                 if let Some(ref superclass) = superclass {
                     self.environment = Environment::new_enclosed(&self.environment);
                     self.environment
-                        .define("super", Literal::Class(superclass.clone()));
+                        .define(SUPER_KEYWORD, Literal::Class(superclass.clone()));
                 }
 
                 let methods = methods
                     .iter()
                     .map(|method| {
-                        let is_initializer = method.name.lexeme == "init";
+                        let is_initializer = method.name.lexeme == INIT_METHOD;
                         let function =
                             Rc::new(LoxFunction::new(method, &self.environment, is_initializer));
                         (method.name.lexeme.clone(), function)
@@ -182,22 +183,22 @@ impl Interpreter {
                 match op.token_type {
                     TokenType::STAR => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l * r),
-                        _ => return Err(self.type_error("Operands must be numbers.")),
+                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS)),
                     },
                     TokenType::SLASH => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l / r),
-                        _ => return Err(self.type_error("Operands must be numbers.")),
+                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS)),
                     },
                     TokenType::PLUS => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l + r),
                         (Literal::String(l), Literal::String(r)) => {
                             Literal::String(format!("{l}{r}"))
                         }
-                        _ => return Err(self.type_error("Operands must be numbers or strings.")),
+                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS_OR_STRINGS)),
                     },
                     TokenType::MINUS => match (left, right) {
                         (Literal::Number(l), Literal::Number(r)) => Literal::Number(l - r),
-                        _ => return Err(self.type_error("Operands must be numbers.")),
+                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS)),
                     },
                     TokenType::LESS
                     | TokenType::LESS_EQUAL
@@ -206,7 +207,7 @@ impl Interpreter {
                         (Literal::Number(l), Literal::Number(r)) => {
                             Literal::Boolean(compare_number(&op.token_type, l, r))
                         }
-                        _ => return Err(self.type_error("Operands must be numbers.")),
+                        _ => return Err(self.type_error(OPERANDS_MUST_BE_NUMBERS)),
                     },
                     TokenType::EQUAL_EQUAL => Literal::Boolean(left == right),
                     TokenType::BANG_EQUAL => Literal::Boolean(left != right),
@@ -225,7 +226,7 @@ impl Interpreter {
                     _ => return Err(self.type_error("Can only call functions and classes.")),
                 };
                 if args.len() != callee.arity() {
-                    return Err(RuntimeError::ArgumentCountError {
+                    return Err(LoxError::ArgumentCountError {
                         expected: callee.arity(),
                         got: args.len(),
                     });
@@ -236,7 +237,7 @@ impl Interpreter {
                 let object = self.evaluate(object)?;
                 match object {
                     Literal::Instance(instance) => instance.borrow().get(name)?,
-                    _ => return Err(self.type_error("Only instances have fields.")),
+                    _ => return Err(self.type_error(ONLY_INSTANCES_HAVE_FIELDS)),
                 }
             }
             Expression::Grouping(expr) => self.evaluate(expr)?,
@@ -267,7 +268,7 @@ impl Interpreter {
                         instance.borrow_mut().set(name, value.clone());
                         return Ok(value);
                     }
-                    _ => return Err(self.type_error("Only instances have fields.")),
+                    _ => return Err(self.type_error(ONLY_INSTANCES_HAVE_FIELDS)),
                 }
             }
             Expression::Super {
@@ -281,7 +282,8 @@ impl Interpreter {
                     return Err(self.type_error("Super reference must be a class."));
                 };
 
-                let Literal::Instance(object) = self.environment.get_at(distance - 1, "this")?
+                let Literal::Instance(object) =
+                    self.environment.get_at(distance - 1, THIS_KEYWORD)?
                 else {
                     return Err(self.type_error("'this' reference must be an instance."));
                 };
@@ -322,8 +324,8 @@ impl Interpreter {
         }
     }
 
-    fn type_error(&self, message: &str) -> RuntimeError {
-        RuntimeError::TypeError(message.to_string())
+    fn type_error(&self, message: &str) -> LoxError {
+        LoxError::TypeError(message.to_string())
     }
 }
 

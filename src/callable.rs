@@ -8,8 +8,9 @@ use std::{
 };
 
 use crate::{
+    constants::{INIT_METHOD, THIS_KEYWORD},
     environment::Environment,
-    error::RuntimeError,
+    error::LoxError,
     grammar::{Function, Literal, Token},
     interpreter::{Interpreter, InterpreterResult},
 };
@@ -46,7 +47,7 @@ impl LoxFunction {
 
     pub fn bind(&self, instance: Rc<RefCell<LoxInstance>>) -> InterpreterResult<LoxFunction> {
         let env = Environment::new_enclosed(&self.closure);
-        env.define("this", Literal::Instance(instance));
+        env.define(THIS_KEYWORD, Literal::Instance(instance));
         Ok(LoxFunction::new(
             &self.declaration,
             &env,
@@ -74,7 +75,7 @@ impl LoxCallable for LoxFunction {
         let result = interpreter.execute_block(&self.declaration.body, env)?;
 
         if self.is_initializer {
-            return self.closure.get_at(0, "this");
+            return self.closure.get_at(0, THIS_KEYWORD);
         }
 
         match result {
@@ -159,7 +160,7 @@ impl LoxClass {
 
 impl LoxCallable for LoxClass {
     fn arity(&self) -> usize {
-        let initializer = self.find_method("init");
+        let initializer = self.find_method(INIT_METHOD);
         if let Some(initializer) = initializer {
             initializer.arity()
         } else {
@@ -174,7 +175,7 @@ impl LoxCallable for LoxClass {
     ) -> InterpreterResult<Literal> {
         let instance = LoxInstance::new(self.clone());
         let rc_instance = Rc::new(RefCell::new(instance));
-        if let Some(initializer) = self.find_method("init") {
+        if let Some(initializer) = self.find_method(INIT_METHOD) {
             initializer
                 .bind(rc_instance.clone())?
                 .call(interpreter, arguments)?;
@@ -211,7 +212,7 @@ impl LoxInstance {
             return Ok(Literal::Function(Rc::new(method.bind(instance)?)));
         }
 
-        Err(RuntimeError::UndefinedProperty(name.lexeme.clone()))
+        Err(LoxError::UndefinedProperty(name.lexeme.clone()))
     }
 
     pub fn set(&mut self, name: &Token, value: Literal) {
@@ -230,7 +231,7 @@ impl LoxCallable for LoxInstance {
         _arguments: &[Literal],
     ) -> InterpreterResult<Literal> {
         let err_msg = format!("'{}' object is not callable", self.klass.name);
-        Err(RuntimeError::TypeError(err_msg))
+        Err(LoxError::TypeError(err_msg))
     }
 
     fn to_string(&self) -> String {

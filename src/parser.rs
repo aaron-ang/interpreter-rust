@@ -1,11 +1,11 @@
 use anyhow::Result;
 
 use crate::{
-    error::RuntimeError,
+    error::LoxError,
     grammar::{Expression, Function, Literal, Statement, Token, TokenType},
 };
 
-type ParserResult<T> = Result<T, RuntimeError>;
+type ParserResult<T> = Result<T, LoxError>;
 
 pub struct Parser<'a> {
     tokens: &'a [Token],
@@ -479,11 +479,7 @@ impl<'a> Parser<'a> {
         id
     }
 
-    pub fn error(token: &Token, message: &str) -> RuntimeError {
-        RuntimeError::ParserError {
-            line: token.line,
-            lexeme: token.lexeme.clone(),
-            message: message.to_string(),
-        }
+    pub fn error(token: &Token, message: &str) -> LoxError {
+        LoxError::parser_error(token.line, &token.lexeme, message)
     }
 }

@@ -2,12 +2,13 @@ use anyhow::Result;
 use std::collections::HashMap;
 
 use crate::{
-    error::CompileError,
+    constants::{errors::*, INIT_METHOD, SUPER_KEYWORD, THIS_KEYWORD},
+    error::LoxError,
     grammar::{Expression, Function, Statement, Token},
     interpreter::Interpreter,
 };
 
-type ResolverResult<T> = Result<T, CompileError>;
+type ResolverResult<T> = Result<T, LoxError>;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum FunctionType {
@@ -52,7 +53,7 @@ impl<'a> Resolver<'a> {
     fn declare(&mut self, name: &Token) -> ResolverResult<()> {
         if let Some(scope) = self.scopes.last_mut() {
             if scope.contains_key(&name.lexeme) {
-                return Err(self.error(name, "Already a variable with this name in this scope."));
+                return Err(self.error(name, DUPLICATE_VARIABLE));
             }
             scope.insert(name.lexeme.clone(), false);
         }
@@ -94,7 +95,7 @@ impl<'a> Resolver<'a> {
                     match superclass {
                         Expression::Variable { name: sup_name, .. } => {
                             if name.lexeme == sup_name.lexeme {
-                                return Err(self.error(name, "A class can't inherit from itself."));
+                                return Err(self.error(name, CLASS_INHERIT_SELF));
                             }
                             self.current_class = ClassType::Subclass;
                             self.resolve_expression(superclass)?;
@@ -102,7 +103,7 @@ impl<'a> Resolver<'a> {
                             self.scopes
                                 .last_mut()
                                 .unwrap()
-                                .insert("super".to_string(), true);
+                                .insert(SUPER_KEYWORD.to_string(), true);
                         }
                         _ => unreachable!("Superclass should be a variable"),
                     }
@@ -111,12 +112,12 @@ impl<'a> Resolver<'a> {
                 // Set up scope for methods with "this" defined
                 self.begin_scope();
                 if let Some(scope) = self.scopes.last_mut() {
-                    scope.insert("this".to_string(), true);
+                    scope.insert(THIS_KEYWORD.to_string(), true);
                 }
 
                 // Resolve each method
                 for method in methods {
-                    let function_type = if method.name.lexeme == "init" {
+                    let function_type = if method.name.lexeme == INIT_METHOD {
                         FunctionType::Initializer
                     } else {
                         FunctionType::Method
@@ -161,13 +162,11 @@ impl<'a> Resolver<'a> {
             }
             Statement::Return { keyword, value } => {
                 if self.current_function == FunctionType::None {
-                    return Err(self.error(keyword, "Can't return from top-level code."));
+                    return Err(self.error(keyword, RETURN_FROM_TOP_LEVEL));
                 }
                 if let Some(value) = value {
                     if self.current_function == FunctionType::Initializer {
-                        return Err(
-                            self.error(keyword, "Can't return a value from an initializer.")
-                        );
+                        return Err(self.error(keyword, RETURN_FROM_INITIALIZER));
                     }
                     self.resolve_expression(value)?;
                 }
@@ -185,9 +184,7 @@ impl<'a> Resolver<'a> {
             Expression::Variable { id, name } => {
                 if let Some(scope) = self.scopes.last() {
                     if let Some(false) = scope.get(&name.lexeme) {
-                        return Err(
-                            self.error(name, "Can't read local variable in its own initializer.")
-                        );
+                        return Err(self.error(name, VARIABLE_IN_OWN_INITIALIZER));
                     }
                 }
                 self.resolve_local(*id, name);
@@ -226,17 +223,15 @@ impl<'a> Resolver<'a> {
             }
             Expression::This { id, keyword } => {
                 if self.current_class == ClassType::None {
-                    return Err(self.error(keyword, "Can't use 'this' outside of a class."));
+                    return Err(self.error(keyword, THIS_OUTSIDE_CLASS));
                 }
                 self.resolve_local(*id, keyword);
             }
             Expression::Super { id, keyword, .. } => {
                 if self.current_class == ClassType::None {
-                    return Err(self.error(keyword, "Can't use 'super' outside of a class."));
+                    return Err(self.error(keyword, SUPER_OUTSIDE_CLASS));
                 } else if self.current_class != ClassType::Subclass {
-                    return Err(
-                        self.error(keyword, "Can't use 'super' in a class with no superclass.")
-                    );
+                    return Err(self.error(keyword, SUPER_WITHOUT_SUPERCLASS));
                 }
                 self.resolve_local(*id, keyword);
             }
@@ -269,11 +264,7 @@ impl<'a> Resolver<'a> {
         Ok(())
     }
 
-    fn error(&self, token: &Token, message: &str) -> CompileError {
-        CompileError::ResolverError {
-            line: token.line,
-            lexeme: token.lexeme.clone(),
-            message: message.to_string(),
-        }
+    fn error(&self, token: &Token, message: &str) -> LoxError {
+        LoxError::resolver_error(token.line, &token.lexeme, message)
     }
 }
