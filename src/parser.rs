@@ -124,24 +124,29 @@ impl<'a> Parser<'a> {
 
     fn statement(&mut self) -> ParserResult<Statement> {
         if self.match_(&[TokenType::FOR]) {
-            self.for_statement()
-        } else if self.match_(&[TokenType::IF]) {
-            self.if_statement()
-        } else if self.match_(&[TokenType::PRINT]) {
+            return self.for_statement();
+        }
+        if self.match_(&[TokenType::IF]) {
+            return self.if_statement();
+        }
+        if self.match_(&[TokenType::PRINT]) {
             let expression = self.expression()?;
             self.consume(&TokenType::SEMICOLON, "Expect ';' after value.")?;
-            Ok(Statement::Print(expression))
-        } else if self.match_(&[TokenType::RETURN]) {
-            self.return_statement()
-        } else if self.match_(&[TokenType::WHILE]) {
-            self.while_statement()
-        } else if self.match_(&[TokenType::LEFT_BRACE]) {
-            Ok(Statement::Block(self.block()?))
-        } else {
-            let expression = self.expression()?;
-            self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.")?;
-            Ok(Statement::Expression(expression))
+            return Ok(Statement::Print(expression));
         }
+        if self.match_(&[TokenType::RETURN]) {
+            return self.return_statement();
+        }
+        if self.match_(&[TokenType::WHILE]) {
+            return self.while_statement();
+        }
+        if self.match_(&[TokenType::LEFT_BRACE]) {
+            return Ok(Statement::Block(self.block()?));
+        }
+
+        let expression = self.expression()?;
+        self.consume(&TokenType::SEMICOLON, "Expect ';' after expression.")?;
+        Ok(Statement::Expression(expression))
     }
 
     fn for_statement(&mut self) -> ParserResult<Statement> {
@@ -412,6 +417,15 @@ impl<'a> Parser<'a> {
             let expr = self.expression()?;
             self.consume(&TokenType::RIGHT_PAREN, "Expect ')' after expression.")?;
             Expression::Grouping(Box::new(expr))
+        } else if self.match_(&[TokenType::SUPER]) {
+            let keyword = self.previous().clone();
+            self.consume(&TokenType::DOT, "Expect '.' after 'super'.")?;
+            self.consume(&TokenType::IDENTIFIER, "Expect superclass method name.")?;
+            Expression::Super {
+                id: self.next_id(),
+                keyword,
+                method: self.previous().clone(),
+            }
         } else {
             return Err(Parser::error(self.peek(), "Expect expression."));
         };

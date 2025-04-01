@@ -12,7 +12,7 @@ pub type InterpreterResult<T> = Result<T, RuntimeError>;
 
 pub struct Interpreter {
     globals: Environment,
-    env: Environment,
+    environment: Environment,
     locals: HashMap<usize, usize>,
 }
 
@@ -24,12 +24,12 @@ impl Default for Interpreter {
 
 impl Interpreter {
     pub fn new() -> Self {
-        let env = Environment::new();
-        env.define("clock", Literal::Function(Native::clock()));
+        let environment = Environment::new();
+        environment.define("clock", Literal::Function(Native::clock()));
 
         Interpreter {
-            globals: env.clone(),
-            env,
+            globals: environment.clone(),
+            environment,
             locals: HashMap::new(),
         }
     }
@@ -46,7 +46,7 @@ impl Interpreter {
     pub fn execute(&mut self, statement: &Statement) -> InterpreterResult<ControlFlow<Literal>> {
         match statement {
             Statement::Block(statements) => {
-                let env = Environment::new_enclosed(&self.env);
+                let env = Environment::new_enclosed(&self.environment);
                 self.execute_block(statements, env)
             }
             Statement::Class {
@@ -63,19 +63,29 @@ impl Interpreter {
                     None
                 };
 
-                self.env.define(&name.lexeme, Literal::Nil);
+                self.environment.define(&name.lexeme, Literal::Nil);
+
+                if let Some(ref superclass) = superclass {
+                    self.environment = Environment::new_enclosed(&self.environment);
+                    self.environment
+                        .define("super", Literal::Class(superclass.clone()));
+                }
 
                 let methods = methods
                     .iter()
                     .map(|method| {
                         let is_initializer = method.name.lexeme == "init";
-                        let function = Rc::new(LoxFunction::new(method, &self.env, is_initializer));
+                        let function =
+                            Rc::new(LoxFunction::new(method, &self.environment, is_initializer));
                         (method.name.lexeme.clone(), function)
                     })
                     .collect();
 
+                if superclass.is_some() {
+                    self.environment = self.environment.ancestor(1);
+                }
                 let class = Rc::new(LoxClass::new(name.lexeme.clone(), superclass, methods));
-                self.env.assign(name, &Literal::Class(class))?;
+                self.environment.assign(name, &Literal::Class(class))?;
 
                 Ok(ControlFlow::Continue(()))
             }
@@ -109,7 +119,7 @@ impl Interpreter {
                 } else {
                     Literal::Nil
                 };
-                self.env.define(&name.lexeme, value);
+                self.environment.define(&name.lexeme, value);
                 Ok(ControlFlow::Continue(()))
             }
             Statement::While { condition, body } => {
@@ -121,9 +131,10 @@ impl Interpreter {
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Function(fun) => {
-                let fun = LoxFunction::new(fun, &self.env, false);
+                let fun = LoxFunction::new(fun, &self.environment, false);
                 let name = fun.name();
-                self.env.define(&name, Literal::Function(Rc::new(fun)));
+                self.environment
+                    .define(&name, Literal::Function(Rc::new(fun)));
                 Ok(ControlFlow::Continue(()))
             }
             Statement::Return { value, .. } => {
@@ -137,12 +148,29 @@ impl Interpreter {
         }
     }
 
+    pub fn execute_block(
+        &mut self,
+        statements: &[Statement],
+        env: Environment,
+    ) -> InterpreterResult<ControlFlow<Literal>> {
+        let previous_env = std::mem::replace(&mut self.environment, env);
+        for statement in statements {
+            if let ControlFlow::Break(rv) = self.execute(statement)? {
+                self.environment = previous_env;
+                return Ok(ControlFlow::Break(rv));
+            }
+        }
+        self.environment = previous_env;
+        Ok(ControlFlow::Continue(()))
+    }
+
     pub fn evaluate(&mut self, expr: &Expression) -> InterpreterResult<Literal> {
         let literal = match expr {
             Expression::Assign { id, name, value } => {
                 let value = self.evaluate(value)?;
                 if let Some(distance) = self.locals.get(id) {
-                    self.env.assign_at(*distance, &name.lexeme, &value)?;
+                    self.environment
+                        .assign_at(*distance, &name.lexeme, &value)?;
                 } else {
                     self.globals.assign(name, &value)?;
                 }
@@ -204,6 +232,13 @@ impl Interpreter {
                 }
                 callee.call(self, &args)?
             }
+            Expression::Get { object, name } => {
+                let object = self.evaluate(object)?;
+                match object {
+                    Literal::Instance(instance) => instance.borrow().get(name)?,
+                    _ => return Err(self.type_error("Only instances have fields.")),
+                }
+            }
             Expression::Grouping(expr) => self.evaluate(expr)?,
             Expression::Literal(l) => l.clone(),
             Expression::Logical { left, op, right } => {
@@ -218,25 +253,6 @@ impl Interpreter {
                     self.evaluate(right)?
                 } else {
                     left
-                }
-            }
-            Expression::Unary { op, right } => {
-                let literal = self.evaluate(right)?;
-                match op.token_type {
-                    TokenType::BANG => Literal::Boolean(!literal.is_truthy()),
-                    TokenType::MINUS => match literal {
-                        Literal::Number(n) => Literal::Number(-n),
-                        _ => return Err(self.type_error("Operand must be a number.")),
-                    },
-                    _ => unreachable!(),
-                }
-            }
-            Expression::Variable { id, name } => self.lookup_variable(id, name)?,
-            Expression::Get { object, name } => {
-                let object = self.evaluate(object)?;
-                match object {
-                    Literal::Instance(instance) => instance.borrow().get(name)?,
-                    _ => return Err(self.type_error("Only instances have fields.")),
                 }
             }
             Expression::Set {
@@ -254,25 +270,44 @@ impl Interpreter {
                     _ => return Err(self.type_error("Only instances have fields.")),
                 }
             }
+            Expression::Super {
+                id,
+                keyword: _,
+                method,
+            } => {
+                let distance = *self.locals.get(id).expect("Super expression not resolved");
+
+                let Literal::Class(superclass) = self.environment.get_at(distance, "super")? else {
+                    return Err(self.type_error("Super reference must be a class."));
+                };
+
+                let Literal::Instance(object) = self.environment.get_at(distance - 1, "this")?
+                else {
+                    return Err(self.type_error("'this' reference must be an instance."));
+                };
+
+                let Some(method) = superclass.find_method(&method.lexeme) else {
+                    let err_msg = format!("Undefined property '{}'.", method.lexeme);
+                    return Err(self.type_error(&err_msg));
+                };
+
+                Literal::Function(Rc::new(method.bind(object)?))
+            }
             Expression::This { id, keyword } => self.lookup_variable(id, keyword)?,
+            Expression::Unary { op, right } => {
+                let literal = self.evaluate(right)?;
+                match op.token_type {
+                    TokenType::BANG => Literal::Boolean(!literal.is_truthy()),
+                    TokenType::MINUS => match literal {
+                        Literal::Number(n) => Literal::Number(-n),
+                        _ => return Err(self.type_error("Operand must be a number.")),
+                    },
+                    _ => unreachable!(),
+                }
+            }
+            Expression::Variable { id, name } => self.lookup_variable(id, name)?,
         };
         Ok(literal)
-    }
-
-    pub fn execute_block(
-        &mut self,
-        statements: &[Statement],
-        env: Environment,
-    ) -> InterpreterResult<ControlFlow<Literal>> {
-        let previous_env = std::mem::replace(&mut self.env, env);
-        for statement in statements {
-            if let ControlFlow::Break(rv) = self.execute(statement)? {
-                self.env = previous_env;
-                return Ok(ControlFlow::Break(rv));
-            }
-        }
-        self.env = previous_env;
-        Ok(ControlFlow::Continue(()))
     }
 
     pub fn resolve(&mut self, exp_id: usize, depth: usize) {
@@ -281,7 +316,7 @@ impl Interpreter {
 
     fn lookup_variable(&mut self, exp_id: &usize, name: &Token) -> InterpreterResult<Literal> {
         if let Some(depth) = self.locals.get(exp_id) {
-            self.env.get_at(*depth, &name.lexeme)
+            self.environment.get_at(*depth, &name.lexeme)
         } else {
             self.globals.get(name)
         }

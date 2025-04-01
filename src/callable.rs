@@ -44,7 +44,7 @@ impl LoxFunction {
         self.declaration.name.lexeme.clone()
     }
 
-    fn bind(&self, instance: Rc<RefCell<LoxInstance>>) -> InterpreterResult<LoxFunction> {
+    pub fn bind(&self, instance: Rc<RefCell<LoxInstance>>) -> InterpreterResult<LoxFunction> {
         let env = Environment::new_enclosed(&self.closure);
         env.define("this", Literal::Instance(instance));
         Ok(LoxFunction::new(
@@ -146,7 +146,7 @@ impl LoxClass {
         }
     }
 
-    fn find_method(&self, name: &str) -> Option<Rc<LoxFunction>> {
+    pub fn find_method(&self, name: &str) -> Option<Rc<LoxFunction>> {
         if let Some(method) = self.methods.get(name) {
             return Some(method.clone());
         }

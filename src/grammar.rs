@@ -196,6 +196,11 @@ pub enum Expression {
         id: usize,
         keyword: Token,
     },
+    Super {
+        id: usize,
+        keyword: Token,
+        method: Token,
+    },
 }
 
 impl fmt::Display for Expression {
@@ -238,6 +243,11 @@ impl fmt::Display for Expression {
             }
             Expression::This { keyword, .. } => {
                 write!(f, "(this {})", keyword.lexeme)
+            }
+            Expression::Super {
+                keyword, method, ..
+            } => {
+                write!(f, "(super {} {})", keyword.lexeme, method.lexeme)
             }
         }
     }

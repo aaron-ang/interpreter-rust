@@ -90,11 +90,18 @@ impl<'a> Resolver<'a> {
 
                 // Handle inheritance
                 if let Some(superclass) = superclass {
-                    if let Expression::Variable { name: sup_name, .. } = superclass {
-                        if name.lexeme == sup_name.lexeme {
-                            return Err(self.error(name, "A class can't inherit from itself."));
+                    match superclass {
+                        Expression::Variable { name: sup_name, .. } => {
+                            if name.lexeme == sup_name.lexeme {
+                                return Err(self.error(name, "A class can't inherit from itself."));
+                            }
+                            self.resolve_expression(superclass)?;
+                            self.begin_scope();
+                            if let Some(scope) = self.scopes.last_mut() {
+                                scope.insert("super".to_string(), true);
+                            }
                         }
-                        self.resolve_expression(superclass)?;
+                        _ => unreachable!("Superclass should be a variable"),
                     }
                 }
 
@@ -115,6 +122,9 @@ impl<'a> Resolver<'a> {
                 }
 
                 self.end_scope();
+                if superclass.is_some() {
+                    self.end_scope();
+                }
                 self.current_class = enclosing_class;
             }
             Statement::Variable { name, init } => {
@@ -215,6 +225,9 @@ impl<'a> Resolver<'a> {
                 if self.current_class == ClassType::None {
                     return Err(self.error(keyword, "Can't use 'this' outside of a class."));
                 }
+                self.resolve_local(*id, keyword);
+            }
+            Expression::Super { id, keyword, .. } => {
                 self.resolve_local(*id, keyword);
             }
         }

@@ -59,7 +59,7 @@ impl Environment {
         Ok(())
     }
 
-    fn ancestor(&self, distance: usize) -> Environment {
+    pub fn ancestor(&self, distance: usize) -> Environment {
         let mut env = self.clone();
         for _ in 0..distance {
             let parent = env
