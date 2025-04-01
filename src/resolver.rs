@@ -21,6 +21,7 @@ enum FunctionType {
 enum ClassType {
     None,
     Class,
+    Subclass,
 }
 
 pub struct Resolver<'a> {
@@ -95,11 +96,13 @@ impl<'a> Resolver<'a> {
                             if name.lexeme == sup_name.lexeme {
                                 return Err(self.error(name, "A class can't inherit from itself."));
                             }
+                            self.current_class = ClassType::Subclass;
                             self.resolve_expression(superclass)?;
                             self.begin_scope();
-                            if let Some(scope) = self.scopes.last_mut() {
-                                scope.insert("super".to_string(), true);
-                            }
+                            self.scopes
+                                .last_mut()
+                                .unwrap()
+                                .insert("super".to_string(), true);
                         }
                         _ => unreachable!("Superclass should be a variable"),
                     }
@@ -228,6 +231,13 @@ impl<'a> Resolver<'a> {
                 self.resolve_local(*id, keyword);
             }
             Expression::Super { id, keyword, .. } => {
+                if self.current_class == ClassType::None {
+                    return Err(self.error(keyword, "Can't use 'super' outside of a class."));
+                } else if self.current_class != ClassType::Subclass {
+                    return Err(
+                        self.error(keyword, "Can't use 'super' in a class with no superclass.")
+                    );
+                }
                 self.resolve_local(*id, keyword);
             }
         }
